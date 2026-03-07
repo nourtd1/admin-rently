@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --primary: #DC2626;
+    --primary-hover: #B91C1C;
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    overscroll-behavior: none;
+}
+
+body {
+    @apply bg-[#F8F7FC] text-slate-800 antialiased;
+    -webkit-font-smoothing: antialiased;
+}
+
+#root {
+    height: 100%;
+}
+
+/* Smooth scrolling */
+* {
+    scroll-behavior: smooth;
+}
+
+/* Hide scrollbar on mobile but keep scroll */
+@media (max-width: 768px) {
+    ::-webkit-scrollbar {
+        display: none;
+    }
+
+    * {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+
+/* Desktop — keep beautiful scrollbar */
+@media (min-width: 769px) {
+    ::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #E5E7EB;
+        border-radius: 999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #D1D5DB;
+    }
+}
+
+.card {
+    @apply bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md;
+}
+
+/* Bounce animation for badges */
+@keyframes pulse-badge {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.badge-pulse {
+    animation: pulse-badge 2s ease-in-out infinite;
+}
+
+/* Bottom nav safe area fix for iOS */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    nav.fixed.bottom-0 {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
