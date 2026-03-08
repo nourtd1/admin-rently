@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, Home, ShieldCheck, LayoutDashboard,
     AlertCircle, Search, Bell, LogOut, ChevronDown,
-    Menu, X, TrendingUp, Clock, CheckCircle, XCircle, Eye
+    Menu, X, TrendingUp, Clock, CheckCircle, XCircle, Eye,
+    ClipboardList, ThumbsUp, ThumbsDown, MapPin, Calendar, Tag
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { isAuthorizedAdmin } from './adminConfig';
 
 const TABS = [
     { id: 'dashboard', label: 'Tableau de bord', short: 'Dashboard', icon: LayoutDashboard },
-    { id: 'listings', label: 'Modération', short: 'Listings', icon: Home, badge: 'pending' },
+    { id: 'waiting', label: 'En Attente', short: 'Attente', icon: ClipboardList, badge: 'pending' },
+    { id: 'listings', label: 'Modération', short: 'Listings', icon: Home },
     { id: 'users', label: 'Utilisateurs', short: 'Users', icon: Users },
     { id: 'kyc', label: 'KYC', short: 'KYC', icon: ShieldCheck, badge: 'kyc' },
     { id: 'reports', label: 'Signalements', short: 'Reports', icon: AlertCircle },
@@ -29,7 +31,7 @@ function LoginScreen({ onLogin }) {
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) { setError(authError.message); setLoading(false); return; }
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-        if (!profile || !isAuthorizedAdmin(profile.email)) {
+        if (!profile || !isAuthorizedAdmin(profile)) {
             await supabase.auth.signOut();
             setError('Accès refusé. Vous n\'êtes pas administrateur.');
             setLoading(false);
@@ -121,7 +123,7 @@ export default function App() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data && isAuthorizedAdmin(data.email)) {
+            if (data && isAuthorizedAdmin(data)) {
                 setAdminProfile(data);
             } else {
                 await supabase.auth.signOut();
@@ -224,8 +226,8 @@ export default function App() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-left ${isActive
-                                        ? 'bg-rose-50 text-rose-600 font-bold shadow-sm'
-                                        : 'text-slate-500 hover:bg-slate-50 font-medium'
+                                    ? 'bg-rose-50 text-rose-600 font-bold shadow-sm'
+                                    : 'text-slate-500 hover:bg-slate-50 font-medium'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -309,6 +311,7 @@ export default function App() {
                 {/* PAGE CONTENT */}
                 <div className="p-4 lg:p-8 max-w-7xl mx-auto">
                     {activeTab === 'dashboard' && <DashboardModule stats={stats} />}
+                    {activeTab === 'waiting' && <WaitingListModule onStatsChange={fetchStats} />}
                     {activeTab === 'listings' && <ListingsModule />}
                     {activeTab === 'users' && <UsersModule />}
                     {activeTab === 'kyc' && <KYCModule />}
@@ -455,6 +458,221 @@ function RecentActivity() {
                     </div>
                 </div>
             ))}
+        </div>
+    );
+}
+
+// ── WAITING LIST MODULE ────────────────────────────────────────────
+function WaitingListModule({ onStatsChange }) {
+    const [listings, setListings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [processing, setProcessing] = useState(null);
+    const [toast, setToast] = useState(null);
+
+    function showToast(msg, type = 'success') {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3000);
+    }
+
+    async function fetchPending() {
+        setLoading(true);
+        const { data } = await supabase
+            .from('listings')
+            .select('*, profiles!landlord_id(full_name, email, avatar_url), locations!location_id(district, sector)')
+            .eq('status', 'pending_review')
+            .order('submitted_at', { ascending: true });
+        setListings(data || []);
+        setLoading(false);
+    }
+
+    useEffect(() => { fetchPending(); }, []);
+
+    async function handleApprove(id, title) {
+        setProcessing(id);
+        const { error } = await supabase
+            .from('listings')
+            .update({ status: 'active' })
+            .eq('id', id);
+        if (!error) {
+            showToast(`✅ "${title}" approuvé et publié !`, 'success');
+            fetchPending();
+            onStatsChange?.();
+        } else {
+            showToast('❌ Erreur lors de l\'approbation', 'error');
+        }
+        setProcessing(null);
+    }
+
+    async function handleReject(id, title) {
+        setProcessing(id);
+        const { error } = await supabase
+            .from('listings')
+            .update({ status: 'rejected' })
+            .eq('id', id);
+        if (!error) {
+            showToast(`🚫 "${title}" refusé.`, 'error');
+            fetchPending();
+            onStatsChange?.();
+        } else {
+            showToast('❌ Erreur lors du rejet', 'error');
+        }
+        setProcessing(null);
+    }
+
+    return (
+        <div className="space-y-6 relative">
+            {/* Toast */}
+            {toast && (
+                <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-bold text-white transition-all ${toast.type === 'success' ? 'bg-green-600' : 'bg-rose-600'
+                    }`}>
+                    {toast.msg}
+                </div>
+            )}
+
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div>
+                    <h2 className="text-xl lg:text-2xl font-black tracking-tight flex items-center gap-2">
+                        <ClipboardList className="text-rose-600" size={22} />
+                        Liste d'attente
+                    </h2>
+                    <p className="text-slate-400 text-sm mt-1">Maisons soumises par les landlords, en attente de votre validation.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-600 text-xs px-3 py-1.5 rounded-full font-black">
+                        {listings.length} en attente
+                    </span>
+                    <button
+                        onClick={fetchPending}
+                        className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-full font-bold text-slate-500 hover:bg-slate-50 transition-all"
+                    >
+                        ↻ Actualiser
+                    </button>
+                </div>
+            </div>
+
+            {loading ? <LoadingState /> : listings.length === 0 ? (
+                <EmptyState icon="🎉" title="Aucune maison en attente" subtitle="Toutes les soumissions ont été traitées." />
+            ) : (
+                <div className="space-y-4">
+                    {listings.map(listing => (
+                        <WaitingCard
+                            key={listing.id}
+                            listing={listing}
+                            processing={processing === listing.id}
+                            onApprove={() => handleApprove(listing.id, listing.title)}
+                            onReject={() => handleReject(listing.id, listing.title)}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function WaitingCard({ listing, processing, onApprove, onReject }) {
+    const landlord = listing.profiles;
+    const location = listing.locations;
+    const submittedDate = listing.submitted_at
+        ? new Date(listing.submitted_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
+
+    return (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-all">
+            <div className="flex flex-col lg:flex-row">
+                {/* Image */}
+                <div className="w-full lg:w-48 h-40 lg:h-auto bg-slate-100 flex-shrink-0 overflow-hidden">
+                    {listing.thumbnail_url || (listing.images && listing.images[0]) ? (
+                        <img
+                            src={listing.thumbnail_url || listing.images[0]}
+                            alt={listing.title}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl bg-slate-50">
+                            🏠
+                        </div>
+                    )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 p-5 flex flex-col gap-3">
+                    {/* Top row */}
+                    <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                            <h3 className="font-black text-slate-800 text-base truncate">{listing.title}</h3>
+                            <div className="flex flex-wrap gap-3 mt-1">
+                                {location && (
+                                    <span className="flex items-center gap-1 text-xs text-slate-400">
+                                        <MapPin size={11} /> {location.sector ? `${location.sector}, ` : ''}{location.district}
+                                    </span>
+                                )}
+                                <span className="flex items-center gap-1 text-xs text-slate-400">
+                                    <Calendar size={11} /> Soumis le {submittedDate}
+                                </span>
+                            </div>
+                        </div>
+                        <span className="bg-amber-100 text-amber-700 text-[10px] px-2.5 py-1 rounded-full font-black uppercase flex-shrink-0">
+                            En attente
+                        </span>
+                    </div>
+
+                    {/* Meta row */}
+                    <div className="flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                            <div className="w-7 h-7 rounded-lg bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-xs overflow-hidden flex-shrink-0">
+                                {landlord?.avatar_url
+                                    ? <img src={landlord.avatar_url} alt="" className="w-full h-full object-cover" />
+                                    : (landlord?.full_name?.charAt(0) || 'L')}
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Landlord</p>
+                                <p className="text-xs font-bold text-slate-700">{landlord?.full_name || '—'}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-slate-50 rounded-xl px-3 py-2">
+                            <Tag size={12} className="text-slate-400" />
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Prix / mois</p>
+                                <p className="text-xs font-black text-slate-800">{listing.monthly_rent?.toLocaleString()} RWF</p>
+                            </div>
+                        </div>
+                        {listing.property_type && (
+                            <div className="flex items-center gap-1.5 bg-slate-50 rounded-xl px-3 py-2">
+                                <Home size={12} className="text-slate-400" />
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Type</p>
+                                    <p className="text-xs font-bold text-slate-700 capitalize">{listing.property_type}</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-3 mt-auto pt-2 border-t border-slate-50">
+                        <button
+                            onClick={onReject}
+                            disabled={processing}
+                            className="flex-1 flex items-center justify-center gap-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
+                        >
+                            <ThumbsDown size={15} />
+                            Refuser
+                        </button>
+                        <button
+                            onClick={onApprove}
+                            disabled={processing}
+                            className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-200 transition-all disabled:opacity-50"
+                        >
+                            {processing ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <ThumbsUp size={15} />
+                            )}
+                            Approuver
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

@@ -1,13 +1,21 @@
 // Configuration pour les administrateurs autorisés
-// Liste des emails autorisés à accéder au portail admin
+// Option 1 : Liste des emails autorisés (à remplir si besoin)
 export const AUTHORIZED_ADMIN_EMAILS = [
-  // Ajoutez ici les emails des administrateurs autorisés
+  'sidickabdoulayesino1@gmail.com'
   // Exemple: 'admin@rently.com',
-  // 'manager@rently.com',
 ];
 
-// Fonction pour vérifier si un email est autorisé
-export function isAuthorizedAdmin(email) {
-  if (!email) return false;
-  return AUTHORIZED_ADMIN_EMAILS.includes(email.toLowerCase());
+// Fonction pour vérifier si un utilisateur est admin
+// Accepte soit un email dans la liste, soit un profil avec role = 'admin'
+export function isAuthorizedAdmin(emailOrProfile) {
+  if (!emailOrProfile) return false;
+
+  // Si on passe un objet profil (avec role)
+  if (typeof emailOrProfile === 'object') {
+    if (emailOrProfile.role === 'admin') return true;
+    return AUTHORIZED_ADMIN_EMAILS.includes((emailOrProfile.email || '').toLowerCase());
+  }
+
+  // Si on passe juste un email (string)
+  return AUTHORIZED_ADMIN_EMAILS.includes(emailOrProfile.toLowerCase());
 }
