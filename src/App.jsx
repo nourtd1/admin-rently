@@ -103,9 +103,11 @@ function statusClass(status) {
 }
 
 function StatusBadge({ value }) {
+  const label = String(value || 'unknown').replaceAll('_', ' ');
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${statusClass(value)}`}>
-      {String(value || 'unknown').replaceAll('_', ' ')}
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ring-inset ${statusClass(value)}`}>
+      <span className="h-1 w-1 rounded-full bg-current" />
+      {label}
     </span>
   );
 }
@@ -343,17 +345,33 @@ export default function App() {
   if (loading) return <FullPageLoader />;
   if (!adminProfile) return <LoginScreen onLogin={setAdminProfile} />;
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
-      {sidebarOpen && <button aria-label={t('common.closeMenu')} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+  const ActiveModule = () => {
+    switch (activeTab) {
+      case 'dashboard': return <Dashboard stats={stats} />;
+      case 'moderation': return <Moderation admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />;
+      case 'users': return <UsersModule onChange={() => setRefreshKey((key) => key + 1)} />;
+      case 'kyc': return <KycModule admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />;
+      case 'reports': return <ReportsModule onChange={() => setRefreshKey((key) => key + 1)} />;
+      case 'visits': return <VisitsModule />;
+      case 'payments': return <PaymentsModule />;
+      case 'system': return <SystemModule stats={stats} />;
+      default: return null;
+    }
+  };
 
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
+  return (
+    <div className="flex h-screen overflow-hidden text-slate-900">
+      {sidebarOpen && <button aria-label={t('common.closeMenu')} className="fixed inset-0 z-30 bg-slate-950/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/40 bg-white/60 backdrop-blur-2xl transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-20 items-center justify-between border-b border-slate-100/50 px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#6C3FC4] font-black text-white shadow-lg shadow-violet-100">R</div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#6C3FC4] to-[#4A2D9C] font-black text-white shadow-lg shadow-violet-200">
+              R
+            </div>
             <div>
-              <p className="text-sm font-black leading-4">Rently Admin</p>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Rently workspace</p>
+              <p className="text-base font-black leading-tight tracking-tight text-slate-900">Rently Admin</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500/60">Workspace</p>
             </div>
           </div>
           <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(false)}>
@@ -361,14 +379,21 @@ export default function App() {
           </button>
         </div>
 
-        <div className="border-b border-slate-100 p-4">
-          <div className="rounded-2xl bg-slate-50 p-3">
-            <p className="truncate text-sm font-bold">{adminProfile.full_name || 'Admin'}</p>
-            <p className="truncate text-xs text-slate-500">{adminProfile.email}</p>
+        <div className="border-b border-slate-100/50 p-4">
+          <div className="group relative overflow-hidden rounded-[24px] bg-gradient-to-br from-slate-50 to-white p-4 ring-1 ring-slate-100 transition-all hover:ring-violet-200">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#6C3FC4] text-white shadow-md">
+                <UserCheck size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-800">{adminProfile.full_name || 'Admin'}</p>
+                <p className="truncate text-[10px] font-bold text-slate-400">{adminProfile.email}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3 sidebar-scroll">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -380,20 +405,20 @@ export default function App() {
                   setActiveTab(tab.id);
                   setSidebarOpen(false);
                 }}
-                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${active ? 'bg-violet-50 text-violet-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-bold transition-all duration-200 ${active ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 translate-x-1' : 'text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm'}`}
               >
                 <span className="flex items-center gap-3">
                   <Icon size={18} />
                   {tab.label}
                 </span>
-                {badge > 0 && <span className="rounded-full bg-[#6C3FC4] px-2 py-0.5 text-[10px] font-black text-white">{badge}</span>}
+                {badge > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${active ? 'bg-white text-violet-600' : 'bg-violet-600 text-white'}`}>{badge}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div className="border-t border-slate-100 p-3">
-          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-500 hover:bg-violet-50 hover:text-violet-700">
+        <div className="border-t border-slate-100/50 p-4">
+          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600">
             <LogOut size={18} />
             {t('common.logout')}
           </button>
@@ -401,37 +426,31 @@ export default function App() {
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <button className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(true)}>
-              <Menu size={22} />
-            </button>
-            <div>
-              <h1 className="text-lg font-black">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
-              <p className="hidden text-xs text-slate-500 sm:block">{t('common.subtitle')}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <LangSwitcher />
-            <button onClick={() => setRefreshKey((key) => key + 1)} className="btn-muted">
-              <RefreshCw size={16} />
-              <span className="hidden sm:inline">{t('common.refresh')}</span>
-            </button>
-            <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100">
-              <Bell size={19} />
-            </button>
-          </div>
-        </header>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 lg:p-10">
+          <div className="mx-auto max-w-[1600px] space-y-8">
+            <header className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-4">
+                <button className="rounded-2xl bg-white p-3 text-slate-500 shadow-sm ring-1 ring-slate-100 lg:hidden" onClick={() => setSidebarOpen(true)}>
+                  <Menu size={22} />
+                </button>
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+                    {TABS.find((t) => t.id === activeTab)?.label}
+                  </h1>
+                  <p className="mt-1 font-medium text-slate-500/80">{t('common.subtitle')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <LangSwitcher />
+                <button onClick={() => setRefreshKey((k) => k + 1)} className="btn-muted">
+                  <RefreshCw size={16} />
+                  {t('common.refresh')}
+                </button>
+              </div>
+            </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-8">
-          {activeTab === 'dashboard' && <Dashboard stats={stats} />}
-          {activeTab === 'moderation' && <Moderation admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />}
-          {activeTab === 'users' && <UsersModule onChange={() => setRefreshKey((key) => key + 1)} />}
-          {activeTab === 'kyc' && <KycModule admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />}
-          {activeTab === 'reports' && <ReportsModule onChange={() => setRefreshKey((key) => key + 1)} />}
-          {activeTab === 'visits' && <VisitsModule />}
-          {activeTab === 'payments' && <PaymentsModule />}
-          {activeTab === 'system' && <SystemModule stats={stats} />}
+            <ActiveModule />
+          </div>
         </main>
       </section>
     </div>
@@ -504,14 +523,15 @@ function Dashboard({ stats }) {
 
 function KpiCard({ label, value, helper, icon: Icon }) {
   return (
-    <div className="panel">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-bold text-slate-500">{label}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight">{value}</p>
-          <p className="mt-2 text-xs font-semibold text-slate-400">{helper}</p>
+    <div className="panel group relative overflow-hidden">
+      <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-violet-50/50 transition-all duration-500 group-hover:scale-150" />
+      <div className="relative flex items-start justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">{value}</p>
+          <p className="mt-2 truncate text-xs font-bold text-slate-500/70">{helper}</p>
         </div>
-        <div className="rounded-2xl bg-violet-50 p-3 text-violet-700">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-200 transition-transform duration-300 group-hover:rotate-12">
           <Icon size={22} />
         </div>
       </div>
@@ -520,15 +540,20 @@ function KpiCard({ label, value, helper, icon: Icon }) {
 }
 
 function PriorityCard({ label, value, tone }) {
-  const classes = {
-    violet: 'bg-violet-50 text-violet-700',
-    amber: 'bg-amber-50 text-amber-700',
-    blue: 'bg-blue-50 text-blue-700',
+  const colors = {
+    violet: 'from-violet-500 to-indigo-600 shadow-violet-100',
+    amber: 'from-amber-400 to-orange-500 shadow-amber-100',
+    blue: 'from-blue-500 to-cyan-600 shadow-blue-100',
   };
   return (
-    <div className={`rounded-2xl p-4 ${classes[tone]}`}>
-      <p className="text-3xl font-black">{value}</p>
-      <p className="mt-1 text-sm font-bold">{label}</p>
+    <div className={`group relative overflow-hidden rounded-[24px] bg-gradient-to-br ${colors[tone]} p-5 text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}>
+      <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-white/10 transition-transform duration-500 group-hover:scale-150" />
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/70">{label}</p>
+      <p className="mt-3 text-3xl font-black">{value}</p>
+      <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-white/80">
+        <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+        {value > 0 ? 'Requires attention' : 'All caught up'}
+      </div>
     </div>
   );
 }
@@ -536,13 +561,13 @@ function PriorityCard({ label, value, tone }) {
 function HealthRow({ label, value, total }) {
   const pct = Math.min(100, Math.round((Number(value || 0) / Number(total || 1)) * 100));
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="font-bold text-slate-600">{label}</span>
-        <span className="text-slate-400">{pct}%</span>
+    <div className="group">
+      <div className="mb-2.5 flex items-center justify-between text-sm">
+        <span className="font-bold text-slate-600 transition-colors group-hover:text-violet-700">{label}</span>
+        <span className="font-black text-slate-400">{pct}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-[#6C3FC4]" style={{ width: `${pct}%` }} />
+      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 p-0.5 ring-1 ring-slate-200/50">
+        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -634,33 +659,50 @@ function Moderation({ admin, onChange }) {
         }
       />
 
-      <div className="panel overflow-hidden p-0">
-        <Table
-          loading={loading}
-          empty={t('moderation.empty')}
-          columns={[t('moderation.listing'), t('common.landlord'), t('common.price'), t('common.status'), t('moderation.submitted'), t('common.actions')]}
-          rows={filtered.map((listing) => (
-            <tr key={listing.id} className="table-row">
-              <td className="table-cell">
-                <p className="font-black">{listing.title}</p>
-                <p className="text-xs text-slate-400">{listing.locations?.district || 'Kigali'} {listing.locations?.sector ? `- ${listing.locations.sector}` : ''}</p>
-              </td>
-              <td className="table-cell">
-                <p className="font-bold">{listing.profiles?.full_name || 'Unknown'}</p>
-                <p className="text-xs text-slate-400">{listing.profiles?.email}</p>
-              </td>
-              <td className="table-cell font-bold">{formatMoney(listing.monthly_rent)}</td>
-              <td className="table-cell"><StatusBadge value={listing.status} /></td>
-              <td className="table-cell text-xs text-slate-500">{formatDate(listing.submitted_at || listing.created_at)}</td>
-              <td className="table-cell">
-                <button className="btn-muted" onClick={() => setSelected(listing)}>
-                  <Eye size={15} />
-                  {t('moderation.review')}
-                </button>
-              </td>
-            </tr>
-          ))}
-        />
+      <div className="min-h-[400px]">
+        {loading ? (
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="aspect-[4/5] animate-pulse rounded-[32px] bg-white/40 ring-1 ring-white/60" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState title={t('moderation.empty')} />
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {filtered.map((listing) => (
+              <div key={listing.id} className="group flex flex-col overflow-hidden rounded-[32px] border border-white/60 bg-white/50 shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl hover:shadow-violet-500/5">
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <div className="absolute inset-0 bg-slate-200 animate-pulse" />
+                  <ListingImage listingId={listing.id} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                  <div className="absolute left-4 top-4">
+                    <StatusBadge value={listing.status} />
+                  </div>
+                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
+                    <p className="text-sm font-black">{formatMoney(listing.monthly_rent)}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">{listing.listing_category || 'house'}</p>
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col p-5">
+                  <h3 className="line-clamp-1 text-base font-black text-slate-900 group-hover:text-violet-700 transition-colors">{listing.title}</h3>
+                  <div className="mt-2 flex items-center gap-2 text-xs font-bold text-slate-500">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100">
+                      <UserCheck size={10} />
+                    </div>
+                    <p className="truncate">{listing.profiles?.full_name || 'Landlord'}</p>
+                  </div>
+                  <div className="mt-5 flex items-center gap-2">
+                    <button className="btn-primary w-full py-2.5 text-xs" onClick={() => setSelected(listing)}>
+                      <Eye size={14} />
+                      {t('moderation.review')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {selected && (
@@ -679,26 +721,105 @@ function Moderation({ admin, onChange }) {
 function ListingReviewModal({ listing, onClose, onApprove, onRevision, onReject }) {
   const { t } = useI18n();
   const [note, setNote] = useState('');
+  const [images, setImages] = useState([]);
+  const [loadingImages, setLoadingImages] = useState(true);
+
+  useEffect(() => {
+    fetchImages();
+  }, [listing.id]);
+
+  async function fetchImages() {
+    setLoadingImages(true);
+    const { data } = await supabase
+      .from('listing_images')
+      .select('*')
+      .eq('listing_id', listing.id)
+      .order('display_order', { ascending: true });
+    
+    // Pour chaque image, générer une URL publique ou signée
+    const imagesWithUrls = await Promise.all((data || []).map(async (img) => {
+      if (img.url.startsWith('http')) return img;
+      const { data: signed } = await supabase.storage.from('listings').createSignedUrl(img.url, 3600);
+      return { ...img, url: signed?.signedUrl || img.url };
+    }));
+
+    setImages(imagesWithUrls);
+    setLoadingImages(false);
+  }
+
   return (
     <Modal title={t('moderation.reviewTitle')} onClose={onClose}>
-      <div className="space-y-5">
-        <div>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">{t('moderation.listing')}</p>
-          <h3 className="mt-1 text-2xl font-black">{listing.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{listing.description || t('moderation.noDesc')}</p>
+      <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
+        <div className="space-y-6">
+          <section>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">{t('moderation.listing')}</p>
+            <h3 className="mt-1 text-2xl font-black">{listing.title}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{listing.description || t('moderation.noDesc')}</p>
+          </section>
+
+          <section>
+            <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">{t('moderation.photos')}</p>
+            {loadingImages ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="aspect-video animate-pulse rounded-2xl bg-slate-100" />
+                <div className="aspect-video animate-pulse rounded-2xl bg-slate-100" />
+              </div>
+            ) : images.length === 0 ? (
+              <div className="flex h-32 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 text-sm font-bold text-slate-400">
+                {t('moderation.noPhotos')}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {images.map((img) => (
+                  <div key={img.id} className="group relative aspect-video overflow-hidden rounded-2xl ring-1 ring-slate-200">
+                    <img src={img.url} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+                    {img.is_primary && (
+                      <span className="absolute left-2 top-2 rounded-lg bg-[#6C3FC4] px-2 py-1 text-[10px] font-black text-white shadow-lg">
+                        {t('moderation.primary')}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Info label={t('common.price')} value={formatMoney(listing.monthly_rent)} />
+            <Info label={t('common.type')} value={listing.listing_category || listing.type || 'residential'} />
+            <Info label={t('common.district')} value={listing.locations?.district || 'N/A'} />
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Info label={t('common.price')} value={formatMoney(listing.monthly_rent)} />
-          <Info label={t('common.type')} value={listing.listing_category || listing.type || 'residential'} />
-          <Info label={t('common.district')} value={listing.locations?.district || 'N/A'} />
-        </div>
-        <Field label={t('moderation.adminNote')}>
-          <textarea className="input min-h-28 resize-y" value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('moderation.notePlaceholder')} />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <button className="btn-success" onClick={() => onApprove(note)}>{t('moderation.approve')}</button>
-          <button className="btn-muted justify-center" onClick={() => onRevision(note)}>{t('moderation.requestRevision')}</button>
-          <button className="btn-danger" onClick={() => onReject(note)}>{t('moderation.reject')}</button>
+
+        <div className="space-y-5 rounded-[32px] bg-slate-50 p-6">
+          <div>
+            <h4 className="font-black text-slate-800">{t('moderation.decision')}</h4>
+            <p className="text-xs text-slate-500">{t('moderation.decisionDesc')}</p>
+          </div>
+          
+          <Field label={t('moderation.adminNote')}>
+            <textarea 
+              className="input min-h-[120px] resize-none" 
+              value={note} 
+              onChange={(event) => setNote(event.target.value)} 
+              placeholder={t('moderation.notePlaceholder')} 
+            />
+          </Field>
+
+          <div className="space-y-2">
+            <button className="btn-success w-full justify-center py-4" onClick={() => onApprove(note)}>
+              <CheckCircle2 size={18} />
+              {t('moderation.approve')}
+            </button>
+            <button className="btn-muted w-full justify-center py-4" onClick={() => onRevision(note)}>
+              <RefreshCw size={18} />
+              {t('moderation.requestRevision')}
+            </button>
+            <button className="btn-danger w-full justify-center py-4" onClick={() => onReject(note)}>
+              <XCircle size={18} />
+              {t('moderation.reject')}
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -1379,12 +1500,19 @@ function ChecklistItem({ done, label }) {
 
 function Toolbar({ search, setSearch, placeholder, right }) {
   return (
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:flex-row md:items-center">
-      <div className="flex flex-1 items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-        <Search size={17} className="text-slate-400" />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={placeholder} />
+    <div className="flex flex-col gap-4 rounded-[28px] border border-white/60 bg-white/50 p-3 shadow-sm backdrop-blur-xl md:flex-row md:items-center">
+      <div className="flex flex-1 items-center gap-3 rounded-[20px] bg-slate-100/50 px-4 py-3 transition-all focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-50">
+        <Search size={18} className="text-slate-400" />
+        <input 
+          value={search} 
+          onChange={(event) => setSearch(event.target.value)} 
+          className="w-full bg-transparent text-sm font-bold outline-none placeholder:text-slate-400" 
+          placeholder={placeholder} 
+        />
       </div>
-      {right}
+      <div className="flex items-center gap-2">
+        {right}
+      </div>
     </div>
   );
 }
@@ -1393,17 +1521,19 @@ function Table({ columns, rows, loading, empty }) {
   if (loading) return <LoadingState />;
   if (!rows.length) return <EmptyState title={empty} />;
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-left">
-        <thead className="bg-slate-50">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-5 py-4 text-[11px] font-black uppercase tracking-widest text-slate-400">{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">{rows}</tbody>
-      </table>
+    <div className="table-container">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left">
+          <thead className="table-header">
+            <tr>
+              {columns.map((column) => (
+                <th key={column} className="px-6 py-4">{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100/50 bg-white/30 backdrop-blur-md">{rows}</tbody>
+        </table>
+      </div>
     </div>
   );
 }

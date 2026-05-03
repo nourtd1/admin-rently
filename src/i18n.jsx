@@ -70,6 +70,11 @@ const FR = {
   'moderation.approve': 'Approuver',
   'moderation.requestRevision': 'Demander revision',
   'moderation.reject': 'Rejeter',
+  'moderation.photos': 'Galerie photos',
+  'moderation.noPhotos': 'Aucune photo soumise',
+  'moderation.primary': 'Principale',
+  'moderation.decision': 'Decision admin',
+  'moderation.decisionDesc': 'Expliquez votre choix au propriétaire.',
 
   'users.searchPlaceholder': 'Rechercher nom, email, telephone...',
   'users.allRoles': 'Tous les roles',
@@ -230,6 +235,11 @@ const EN = {
   'moderation.approve': 'Approve',
   'moderation.requestRevision': 'Request revision',
   'moderation.reject': 'Reject',
+  'moderation.photos': 'Photo gallery',
+  'moderation.noPhotos': 'No photos submitted',
+  'moderation.primary': 'Primary',
+  'moderation.decision': 'Admin decision',
+  'moderation.decisionDesc': 'Explain your choice to the landlord.',
 
   'users.searchPlaceholder': 'Search name, email, phone...',
   'users.allRoles': 'All roles',
