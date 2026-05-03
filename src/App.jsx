@@ -1,1041 +1,1173 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Users, Home, ShieldCheck, LayoutDashboard,
-    AlertCircle, Search, Bell, LogOut, ChevronDown,
-    Menu, X, TrendingUp, Clock, CheckCircle, XCircle, Eye,
-    ClipboardList, ThumbsUp, ThumbsDown, MapPin, Calendar, Tag
+  AlertTriangle,
+  BarChart3,
+  Bell,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  CreditCard,
+  Eye,
+  FileCheck2,
+  Home,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  Menu,
+  RefreshCw,
+  Search,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  UserCheck,
+  Users,
+  X,
+  XCircle,
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { isAuthorizedAdmin } from './adminConfig';
 
+const LISTING_STATUSES = ['pending_review', 'revision_needed', 'active', 'rejected', 'draft'];
+const REPORT_STATUSES = ['pending', 'reviewed', 'resolved', 'dismissed'];
+const KYC_STATUSES = ['pending', 'approved', 'rejected'];
+
 const TABS = [
-    { id: 'dashboard', label: 'Tableau de bord', short: 'Dashboard', icon: LayoutDashboard },
-    { id: 'waiting', label: 'En Attente', short: 'Attente', icon: ClipboardList, badge: 'pending' },
-    { id: 'listings', label: 'Modération', short: 'Listings', icon: Home },
-    { id: 'users', label: 'Utilisateurs', short: 'Users', icon: Users },
-    { id: 'kyc', label: 'KYC', short: 'KYC', icon: ShieldCheck, badge: 'kyc' },
-    { id: 'reports', label: 'Signalements', short: 'Reports', icon: AlertCircle },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'moderation', label: 'Moderation', icon: FileCheck2, badge: 'pendingListings' },
+  { id: 'users', label: 'Utilisateurs', icon: Users },
+  { id: 'kyc', label: 'KYC', icon: ShieldCheck, badge: 'pendingKyc' },
+  { id: 'reports', label: 'Signalements', icon: AlertTriangle, badge: 'pendingReports' },
+  { id: 'visits', label: 'Visites', icon: CalendarDays },
+  { id: 'payments', label: 'Paiements', icon: CreditCard },
+  { id: 'system', label: 'Systeme', icon: Settings },
 ];
 
-// ── Auth Guard ─────────────────────────────────────────────────────
+function formatDate(value) {
+  if (!value) return 'N/A';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value));
+  } catch {
+    return 'N/A';
+  }
+}
+
+function formatMoney(value) {
+  return `${Number(value || 0).toLocaleString('fr-FR')} RWF`;
+}
+
+function safeLower(value) {
+  return String(value || '').toLowerCase();
+}
+
+function statusClass(status) {
+  const map = {
+    active: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    approved: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    confirmed: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    pending: 'bg-amber-50 text-amber-700 ring-amber-100',
+    pending_review: 'bg-amber-50 text-amber-700 ring-amber-100',
+    revision_needed: 'bg-blue-50 text-blue-700 ring-blue-100',
+    reviewed: 'bg-blue-50 text-blue-700 ring-blue-100',
+    draft: 'bg-slate-50 text-slate-600 ring-slate-100',
+    rejected: 'bg-red-50 text-red-700 ring-red-100',
+    dismissed: 'bg-slate-50 text-slate-600 ring-slate-100',
+    cancelled: 'bg-red-50 text-red-700 ring-red-100',
+    failed: 'bg-red-50 text-red-700 ring-red-100',
+    success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  };
+  return map[status] || 'bg-slate-50 text-slate-600 ring-slate-100';
+}
+
+function StatusBadge({ value }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${statusClass(value)}`}>
+      {String(value || 'unknown').replaceAll('_', ' ')}
+    </span>
+  );
+}
+
 function LoginScreen({ onLogin }) {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-    async function handleLogin(e) {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-        const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-        if (authError) { setError(authError.message); setLoading(false); return; }
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-        if (!profile || !isAuthorizedAdmin(profile)) {
-            await supabase.auth.signOut();
-            setError('Accès refusé. Vous n\'êtes pas administrateur.');
-            setLoading(false);
-            return;
-        }
-        onLogin(profile);
-        setLoading(false);
+  async function handleLogin(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+      return;
     }
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-slate-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm">
-                {/* Logo */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-rose-600 rounded-2xl shadow-xl shadow-rose-200 mb-4">
-                        <span className="text-white text-2xl font-black">R</span>
-                    </div>
-                    <h1 className="text-2xl font-black text-slate-900">Rently Admin</h1>
-                    <p className="text-slate-500 text-sm mt-1">Portail d'administration</p>
-                </div>
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
 
-                {/* Card */}
-                <div className="bg-white rounded-3xl shadow-xl shadow-slate-100 border border-slate-100 p-8">
-                    <form onSubmit={handleLogin} className="space-y-5">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Email</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-400 transition-all"
-                                placeholder="admin@rently.rw"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Mot de passe</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-400 transition-all"
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
-                        {error && (
-                            <div className="bg-rose-50 border border-rose-100 text-rose-600 text-sm px-4 py-3 rounded-xl font-medium">
-                                ⚠️ {error}
-                            </div>
-                        )}
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-rose-600 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-rose-200 hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-60"
-                        >
-                            {loading ? 'Connexion...' : 'Se connecter →'}
-                        </button>
-                    </form>
-                </div>
-
-                <p className="text-center text-xs text-slate-400 mt-6">
-                    Accès réservé aux administrateurs Rently
-                </p>
-            </div>
-        </div>
-    );
-}
-
-// ── Main App ───────────────────────────────────────────────────────
-export default function App() {
-    const [activeTab, setActiveTab] = useState('dashboard');
-    const [stats, setStats] = useState({ total_users: 0, pending_listings: 0, kyc_pending: 0, revenue: 0 });
-    const [adminProfile, setAdminProfile] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-
-    useEffect(() => {
-        checkUser();
-        fetchStats();
-    }, []);
-
-    // Close sidebar on tab change (mobile)
-    useEffect(() => {
-        setSidebarOpen(false);
-    }, [activeTab]);
-
-    async function checkUser() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data && isAuthorizedAdmin(data)) {
-                setAdminProfile(data);
-            } else {
-                await supabase.auth.signOut();
-            }
-        }
-        setLoading(false);
+    if (profileError || !profile || !isAuthorizedAdmin(profile)) {
+      await supabase.auth.signOut();
+      setError("Acces refuse. Ce compte n'est pas administrateur.");
+      setLoading(false);
+      return;
     }
 
-    async function fetchStats() {
-        try {
-            const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-            const { data: pStats } = await supabase.from('platform_stats').select('*');
-            const statsMap = (pStats || []).reduce((acc, curr) => { acc[curr.key] = curr.value; return acc; }, {});
-            const { data: activeListings } = await supabase.from('listings').select('monthly_rent').eq('status', 'active');
-            const totalRevenue = (activeListings || []).reduce((sum, l) => sum + (l.monthly_rent || 0), 0);
-            const { count: kycPending } = await supabase.from('kyc_verifications').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-            setStats({
-                total_users: usersCount || 0,
-                pending_listings: Number(statsMap['pending_listings'] || 0),
-                kyc_pending: kycPending || 0,
-                revenue: totalRevenue
-            });
-        } catch (err) {
-            console.error(err);
-        }
-    }
+    onLogin(profile);
+    setLoading(false);
+  }
 
-    async function handleLogout() {
-        await supabase.auth.signOut();
-        setAdminProfile(null);
-    }
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-slate-500 text-sm font-medium">Chargement...</p>
+  return (
+    <main className="min-h-screen bg-[#F5F0FF] text-white">
+      <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-6">
+        <div className="grid w-full items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+          <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#4A2D9C] via-[#6C3FC4] to-[#8B5CF6] p-8 shadow-2xl shadow-violet-200 lg:p-10">
+            <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
+            <div className="absolute -bottom-16 -left-16 h-44 w-44 rounded-full bg-white/10" />
+            <div className="relative">
+              <div className="mb-8 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/40 bg-white/20">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white text-base font-black text-[#6C3FC4]">
+                    R
+                  </div>
                 </div>
-            </div>
-        );
-    }
-
-    if (!adminProfile) {
-        return <LoginScreen onLogin={setAdminProfile} />;
-    }
-
-    return (
-        <div className="flex h-screen bg-[#F8F7FC] text-slate-800 overflow-hidden">
-
-            {/* ── MOBILE OVERLAY ─────────────────────────────── */}
-            {sidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-                    onClick={() => setSidebarOpen(false)}
-                />
-            )}
-
-            {/* ── SIDEBAR (desktop always visible / mobile slide-in) ── */}
-            <aside className={`
-                fixed lg:static inset-y-0 left-0 z-40
-                w-72 bg-white border-r border-slate-200 flex flex-col
-                transform transition-transform duration-300 ease-in-out
-                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-            `}>
-                {/* Logo */}
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                    <h1 className="text-xl font-black text-rose-600 flex items-center gap-2">
-                        <span className="bg-rose-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm shadow-lg">R</span>
-                        RENTLY ADMIN
-                    </h1>
-                    <button className="lg:hidden text-slate-400 hover:text-slate-600" onClick={() => setSidebarOpen(false)}>
-                        <X size={20} />
-                    </button>
-                </div>
-
-                {/* Admin profile chip */}
-                <div className="px-4 py-4 border-b border-slate-100">
-                    <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-3">
-                        <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-sm overflow-hidden border border-rose-50">
-                            {adminProfile?.avatar_url
-                                ? <img src={adminProfile.avatar_url} className="w-full h-full object-cover" alt="" />
-                                : (adminProfile?.full_name?.charAt(0) || 'A')}
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-800 truncate">{adminProfile?.full_name || 'Admin'}</p>
-                            <p className="text-[10px] text-rose-600 font-black uppercase tracking-wider">Administrateur</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Nav */}
-                <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-                    {TABS.map((tab) => {
-                        const Icon = tab.icon;
-                        const isActive = activeTab === tab.id;
-                        const badgeValue = tab.badge === 'pending' ? stats.pending_listings : tab.badge === 'kyc' ? stats.kyc_pending : 0;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-left ${isActive
-                                    ? 'bg-rose-50 text-rose-600 font-bold shadow-sm'
-                                    : 'text-slate-500 hover:bg-slate-50 font-medium'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-rose-600' : 'text-slate-400'}`} />
-                                    <span className="text-sm">{tab.label}</span>
-                                </div>
-                                {badgeValue > 0 && (
-                                    <span className="bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
-                                        {badgeValue}
-                                    </span>
-                                )}
-                            </button>
-                        );
-                    })}
-                </nav>
-
-                {/* Logout */}
-                <div className="p-4 border-t border-slate-100">
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-medium text-sm"
-                    >
-                        <LogOut className="w-5 h-5" />
-                        <span>Déconnexion</span>
-                    </button>
-                </div>
-            </aside>
-
-            {/* ── MAIN CONTENT ──────────────────────────────────── */}
-            <main className="flex-1 overflow-y-auto min-w-0 pb-20 lg:pb-0">
-
-                {/* TOP BAR */}
-                <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-20">
-                    {/* Mobile: hamburger + title */}
-                    <div className="flex items-center gap-3">
-                        <button
-                            className="lg:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
-                            onClick={() => setSidebarOpen(true)}
-                        >
-                            <Menu size={22} />
-                        </button>
-                        <span className="lg:hidden font-black text-slate-800 text-sm">
-                            {TABS.find(t => t.id === activeTab)?.label}
-                        </span>
-                    </div>
-
-                    {/* Desktop: search bar */}
-                    <div className="hidden lg:flex items-center gap-3 bg-slate-50 px-4 py-2.5 rounded-2xl w-80 border border-slate-100 group focus-within:ring-2 focus-within:ring-rose-500/20 transition-all">
-                        <Search className="w-4 h-4 text-slate-400 group-focus-within:text-rose-600 flex-shrink-0" />
-                        <input type="text" placeholder="Rechercher..." className="bg-transparent border-none outline-none text-sm w-full" />
-                    </div>
-
-                    {/* Right actions */}
-                    <div className="flex items-center gap-2 lg:gap-4">
-                        <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                            <Bell className="w-5 h-5" />
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-600 rounded-full border-2 border-white" />
-                        </button>
-                        {/* Profile — desktop */}
-                        <div className="hidden lg:flex items-center gap-3 pl-4 border-l border-slate-100">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-slate-800">{adminProfile?.full_name || 'Admin'}</p>
-                                <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Admin</p>
-                            </div>
-                            <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 font-bold border-2 border-rose-50 shadow-sm overflow-hidden">
-                                {adminProfile?.avatar_url
-                                    ? <img src={adminProfile.avatar_url} alt="" className="w-full h-full object-cover" />
-                                    : (adminProfile?.full_name?.charAt(0) || 'A')}
-                            </div>
-                        </div>
-                        {/* Logout — mobile only */}
-                        <button
-                            className="lg:hidden p-2 text-slate-400 hover:text-rose-600 transition-colors"
-                            onClick={handleLogout}
-                        >
-                            <LogOut size={20} />
-                        </button>
-                    </div>
-                </header>
-
-                {/* PAGE CONTENT */}
-                <div className="p-4 lg:p-8 max-w-7xl mx-auto">
-                    {activeTab === 'dashboard' && <DashboardModule stats={stats} />}
-                    {activeTab === 'waiting' && <WaitingListModule onStatsChange={fetchStats} />}
-                    {activeTab === 'listings' && <ListingsModule />}
-                    {activeTab === 'users' && <UsersModule />}
-                    {activeTab === 'kyc' && <KYCModule />}
-                    {activeTab === 'reports' && <ReportsModule />}
-                </div>
-            </main>
-
-            {/* ── MOBILE BOTTOM NAV ─────────────────────────────── */}
-            <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-center">
-                {TABS.map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.id;
-                    const badgeValue = tab.badge === 'pending' ? stats.pending_listings : tab.badge === 'kyc' ? stats.kyc_pending : 0;
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 relative transition-colors ${isActive ? 'text-rose-600' : 'text-slate-400'
-                                }`}
-                        >
-                            <div className="relative">
-                                <Icon size={22} />
-                                {badgeValue > 0 && (
-                                    <span className="absolute -top-1.5 -right-2 bg-rose-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black leading-none">
-                                        {badgeValue > 99 ? '99+' : badgeValue}
-                                    </span>
-                                )}
-                            </div>
-                            <span className="text-[9px] font-bold uppercase tracking-wide">{tab.short}</span>
-                            {isActive && (
-                                <span className="absolute bottom-0 inset-x-0 h-0.5 bg-rose-600 rounded-full" />
-                            )}
-                        </button>
-                    );
-                })}
-            </nav>
-        </div>
-    );
-}
-
-// ── DASHBOARD ──────────────────────────────────────────────────────
-function DashboardModule({ stats }) {
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
                 <div>
-                    <h2 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">Bonjour Admin 👋</h2>
-                    <p className="text-slate-500 mt-1 text-sm">Voici ce qu'il se passe aujourd'hui à Kigali.</p>
+                  <p className="text-base font-black tracking-tight">Rently</p>
+                  <p className="text-xs font-semibold text-white/70">Admin workspace</p>
                 </div>
-                <div className="flex gap-2 sm:gap-4">
-                    <button className="flex-1 sm:flex-none bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-slate-50">
-                        Cette semaine <ChevronDown size={14} />
-                    </button>
-                    <button className="flex-1 sm:flex-none bg-rose-600 text-white px-4 sm:px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">
-                        Exporter
-                    </button>
-                </div>
-            </div>
-
-            {/* Stats grid: 2 cols on mobile, 4 on desktop */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatTile label="Utilisateurs" value={stats.total_users} trend="+12% ce mois" color="blue" icon="👥" />
-                <StatTile label="En attente" value={stats.pending_listings} trend="Priorité Haute" color="rose" icon="🏠" />
-                <StatTile label="KYC à valider" value={stats.kyc_pending} trend="À traiter" color="amber" icon="🪪" />
-                <StatTile label="Volume (RWF)" value={stats.revenue.toLocaleString()} trend="+5% vs hier" color="green" icon="💰" />
-            </div>
-
-            {/* Bottom row: 1 col on mobile, 2 on desktop */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-base font-black tracking-tight">Dernières Activités</h3>
-                        <button className="text-rose-600 text-xs font-bold">Tout voir</button>
-                    </div>
-                    <RecentActivity />
-                </div>
-
-                <div className="bg-gradient-to-br from-rose-600 to-rose-700 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl">
-                    <div className="relative z-10">
-                        <h3 className="text-lg font-black mb-1 opacity-90">Performance Plateforme</h3>
-                        <p className="text-rose-200 text-xs font-medium mb-6">Taux de réponse moyen</p>
-                        <p className="text-5xl font-black mb-1 tracking-tighter">98.4%</p>
-                        <p className="text-rose-200 text-xs font-bold uppercase tracking-widest">Réponse &lt; 1h</p>
-                        <div className="mt-8 flex items-end gap-1">
-                            {[4, 6, 3, 8, 5, 9, 12, 8, 10, 14, 11, 15, 13].map((h, i) => (
-                                <div key={i} className="flex-1 bg-white/20 rounded-full" style={{ height: h * 4 }} />
-                            ))}
-                        </div>
-                    </div>
-                    <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-white/10 rounded-full blur-3xl" />
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function StatTile({ label, value, trend, color, icon }) {
-    const colors = {
-        blue: 'bg-blue-50 text-blue-600',
-        rose: 'bg-rose-50 text-rose-600',
-        amber: 'bg-amber-50 text-amber-600',
-        green: 'bg-green-50 text-green-600',
-    };
-    return (
-        <div className="bg-white rounded-2xl p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <p className="text-slate-400 font-bold uppercase text-[9px] lg:text-[10px] tracking-widest">{label}</p>
-                <span className="text-lg">{icon}</span>
-            </div>
-            <p className="text-2xl lg:text-3xl font-black text-slate-800 tracking-tighter">{value}</p>
-            <span className={`${colors[color]} text-[10px] px-2 py-1 rounded-lg font-black self-start`}>{trend}</span>
-        </div>
-    );
-}
-
-function RecentActivity() {
-    const [activities, setActivities] = useState([]);
-
-    useEffect(() => {
-        supabase
-            .from('listing_review_history')
-            .select('*, listings(title), profiles:admin_id(full_name)')
-            .order('created_at', { ascending: false })
-            .limit(5)
-            .then(({ data }) => setActivities(data || []));
-    }, []);
-
-    if (activities.length === 0) return <p className="text-slate-400 text-sm italic">Aucune activité récente.</p>;
-
-    return (
-        <div className="space-y-4">
-            {activities.map((act) => (
-                <div key={act.id} className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-base flex-shrink-0">
-                        {act.action === 'approved' ? '✅' : act.action === 'rejected' ? '❌' : '⏳'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-800 truncate">
-                            {act.profiles?.full_name || 'Admin'}{' '}
-                            <span className="font-medium text-slate-500">{act.action} "{act.listings?.title || 'Listing'}"</span>
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{new Date(act.created_at).toLocaleString('fr-FR')}</p>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-// ── WAITING LIST MODULE ────────────────────────────────────────────
-function WaitingListModule({ onStatsChange }) {
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [processing, setProcessing] = useState(null);
-    const [toast, setToast] = useState(null);
-
-    function showToast(msg, type = 'success') {
-        setToast({ msg, type });
-        setTimeout(() => setToast(null), 3000);
-    }
-
-    async function fetchPending() {
-        setLoading(true);
-        const { data } = await supabase
-            .from('listings')
-            .select('*, profiles!landlord_id(full_name, email, avatar_url), locations!location_id(district, sector)')
-            .eq('status', 'pending_review')
-            .order('submitted_at', { ascending: true });
-        setListings(data || []);
-        setLoading(false);
-    }
-
-    useEffect(() => { fetchPending(); }, []);
-
-    async function handleApprove(id, title) {
-        setProcessing(id);
-        const { error } = await supabase
-            .from('listings')
-            .update({ status: 'active' })
-            .eq('id', id);
-        if (!error) {
-            showToast(`✅ "${title}" approuvé et publié !`, 'success');
-            fetchPending();
-            onStatsChange?.();
-        } else {
-            showToast('❌ Erreur lors de l\'approbation', 'error');
-        }
-        setProcessing(null);
-    }
-
-    async function handleReject(id, title) {
-        setProcessing(id);
-        const { error } = await supabase
-            .from('listings')
-            .update({ status: 'rejected' })
-            .eq('id', id);
-        if (!error) {
-            showToast(`🚫 "${title}" refusé.`, 'error');
-            fetchPending();
-            onStatsChange?.();
-        } else {
-            showToast('❌ Erreur lors du rejet', 'error');
-        }
-        setProcessing(null);
-    }
-
-    return (
-        <div className="space-y-6 relative">
-            {/* Toast */}
-            {toast && (
-                <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-bold text-white transition-all ${toast.type === 'success' ? 'bg-green-600' : 'bg-rose-600'
-                    }`}>
-                    {toast.msg}
-                </div>
-            )}
-
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                <div>
-                    <h2 className="text-xl lg:text-2xl font-black tracking-tight flex items-center gap-2">
-                        <ClipboardList className="text-rose-600" size={22} />
-                        Liste d'attente
-                    </h2>
-                    <p className="text-slate-400 text-sm mt-1">Maisons soumises par les landlords, en attente de votre validation.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="bg-amber-100 text-amber-600 text-xs px-3 py-1.5 rounded-full font-black">
-                        {listings.length} en attente
-                    </span>
-                    <button
-                        onClick={fetchPending}
-                        className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-full font-bold text-slate-500 hover:bg-slate-50 transition-all"
-                    >
-                        ↻ Actualiser
-                    </button>
-                </div>
-            </div>
-
-            {loading ? <LoadingState /> : listings.length === 0 ? (
-                <EmptyState icon="🎉" title="Aucune maison en attente" subtitle="Toutes les soumissions ont été traitées." />
-            ) : (
-                <div className="space-y-4">
-                    {listings.map(listing => (
-                        <WaitingCard
-                            key={listing.id}
-                            listing={listing}
-                            processing={processing === listing.id}
-                            onApprove={() => handleApprove(listing.id, listing.title)}
-                            onReject={() => handleReject(listing.id, listing.title)}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function WaitingCard({ listing, processing, onApprove, onReject }) {
-    const landlord = listing.profiles;
-    const location = listing.locations;
-    const submittedDate = listing.submitted_at
-        ? new Date(listing.submitted_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-        : '—';
-
-    return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-all">
-            <div className="flex flex-col lg:flex-row">
-                {/* Image */}
-                <div className="w-full lg:w-48 h-40 lg:h-auto bg-slate-100 flex-shrink-0 overflow-hidden">
-                    {listing.thumbnail_url || (listing.images && listing.images[0]) ? (
-                        <img
-                            src={listing.thumbnail_url || listing.images[0]}
-                            alt={listing.title}
-                            className="w-full h-full object-cover"
-                        />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-4xl bg-slate-50">
-                            🏠
-                        </div>
-                    )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 p-5 flex flex-col gap-3">
-                    {/* Top row */}
-                    <div className="flex justify-between items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                            <h3 className="font-black text-slate-800 text-base truncate">{listing.title}</h3>
-                            <div className="flex flex-wrap gap-3 mt-1">
-                                {location && (
-                                    <span className="flex items-center gap-1 text-xs text-slate-400">
-                                        <MapPin size={11} /> {location.sector ? `${location.sector}, ` : ''}{location.district}
-                                    </span>
-                                )}
-                                <span className="flex items-center gap-1 text-xs text-slate-400">
-                                    <Calendar size={11} /> Soumis le {submittedDate}
-                                </span>
-                            </div>
-                        </div>
-                        <span className="bg-amber-100 text-amber-700 text-[10px] px-2.5 py-1 rounded-full font-black uppercase flex-shrink-0">
-                            En attente
-                        </span>
-                    </div>
-
-                    {/* Meta row */}
-                    <div className="flex flex-wrap gap-3">
-                        <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                            <div className="w-7 h-7 rounded-lg bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-xs overflow-hidden flex-shrink-0">
-                                {landlord?.avatar_url
-                                    ? <img src={landlord.avatar_url} alt="" className="w-full h-full object-cover" />
-                                    : (landlord?.full_name?.charAt(0) || 'L')}
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase">Landlord</p>
-                                <p className="text-xs font-bold text-slate-700">{landlord?.full_name || '—'}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 bg-slate-50 rounded-xl px-3 py-2">
-                            <Tag size={12} className="text-slate-400" />
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase">Prix / mois</p>
-                                <p className="text-xs font-black text-slate-800">{listing.monthly_rent?.toLocaleString()} RWF</p>
-                            </div>
-                        </div>
-                        {listing.property_type && (
-                            <div className="flex items-center gap-1.5 bg-slate-50 rounded-xl px-3 py-2">
-                                <Home size={12} className="text-slate-400" />
-                                <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Type</p>
-                                    <p className="text-xs font-bold text-slate-700 capitalize">{listing.property_type}</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-3 mt-auto pt-2 border-t border-slate-50">
-                        <button
-                            onClick={onReject}
-                            disabled={processing}
-                            className="flex-1 flex items-center justify-center gap-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
-                        >
-                            <ThumbsDown size={15} />
-                            Refuser
-                        </button>
-                        <button
-                            onClick={onApprove}
-                            disabled={processing}
-                            className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-200 transition-all disabled:opacity-50"
-                        >
-                            {processing ? (
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                                <ThumbsUp size={15} />
-                            )}
-                            Approuver
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── LISTINGS MODULE ────────────────────────────────────────────────
-function ListingsModule() {
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        supabase
-            .from('listings')
-            .select('*, profiles!landlord_id(full_name, is_verified), locations!location_id(district)')
-            .eq('status', 'pending_review')
-            .order('submitted_at', { ascending: true })
-            .then(({ data }) => { setListings(data || []); setLoading(false); });
-    }, []);
-
-    if (loading) return <LoadingState />;
-
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h2 className="text-xl lg:text-2xl font-black tracking-tight">Modération des Listings</h2>
-                <span className="bg-rose-50 text-rose-600 text-xs px-3 py-1.5 rounded-full font-black">{listings.length} en attente</span>
-            </div>
-
-            {listings.length === 0 ? (
-                <EmptyState icon="🏠" title="Aucun listing en attente" subtitle="Tous les listings ont été modérés." />
-            ) : (
-                <>
-                    {/* Desktop table */}
-                    <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 border-b border-slate-100">
-                                <tr>
-                                    {['Listing', 'Landlord', 'Prix', 'Status', 'Actions'].map(h => (
-                                        <th key={h} className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-slate-400">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {listings.map(listing => (
-                                    <ListingRow key={listing.id} listing={listing} />
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile cards */}
-                    <div className="md:hidden space-y-4">
-                        {listings.map(listing => (
-                            <ListingCard key={listing.id} listing={listing} />
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-}
-
-function ListingRow({ listing }) {
-    return (
-        <tr className="hover:bg-slate-50 transition-colors">
-            <td className="px-6 py-4">
-                <p className="font-bold text-sm">{listing.title}</p>
-                <p className="text-xs text-slate-400">{listing.locations?.district}, Kigali</p>
-            </td>
-            <td className="px-6 py-4">
-                <p className="font-bold text-sm">{listing.profiles?.full_name}</p>
-                {listing.profiles?.is_verified && <p className="text-xs text-green-600 font-bold">Vérifié ✓</p>}
-            </td>
-            <td className="px-6 py-4">
-                <p className="font-bold text-sm">{listing.monthly_rent?.toLocaleString()} RWF</p>
-                <p className="text-xs text-slate-400">/mois</p>
-            </td>
-            <td className="px-6 py-4">
-                <span className="bg-amber-100 text-amber-600 text-[10px] px-2 py-1 rounded-full font-black uppercase">
-                    En attente
-                </span>
-            </td>
-            <td className="px-6 py-4">
-                <button className="bg-slate-100 text-slate-600 text-xs px-4 py-2 rounded-lg font-bold hover:bg-slate-200 flex items-center gap-1">
-                    <Eye size={12} /> Examiner
-                </button>
-            </td>
-        </tr>
-    );
-}
-
-function ListingCard({ listing }) {
-    return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-            <div className="flex justify-between items-start">
-                <div>
-                    <p className="font-bold text-sm">{listing.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{listing.locations?.district}, Kigali</p>
-                </div>
-                <span className="bg-amber-100 text-amber-600 text-[9px] px-2 py-1 rounded-full font-black uppercase flex-shrink-0">
-                    En attente
-                </span>
-            </div>
-            <div className="flex justify-between text-sm">
-                <div>
-                    <p className="text-xs text-slate-400 font-medium">Landlord</p>
-                    <p className="font-bold">{listing.profiles?.full_name}</p>
-                    {listing.profiles?.is_verified && <p className="text-xs text-green-600 font-bold">Vérifié ✓</p>}
-                </div>
-                <div className="text-right">
-                    <p className="text-xs text-slate-400 font-medium">Prix</p>
-                    <p className="font-bold">{listing.monthly_rent?.toLocaleString()} RWF</p>
-                    <p className="text-xs text-slate-400">/mois</p>
-                </div>
-            </div>
-            <button className="w-full bg-rose-600 text-white py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-rose-700 transition-colors">
-                <Eye size={14} /> Examiner ce listing
-            </button>
-        </div>
-    );
-}
-
-// ── USERS MODULE ───────────────────────────────────────────────────
-function UsersModule() {
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
-
-    useEffect(() => {
-        supabase.from('profiles').select('*').order('created_at', { ascending: false })
-            .then(({ data }) => { setUsers(data || []); setLoading(false); });
-    }, []);
-
-    const filtered = users.filter(u =>
-        !search || u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
-    );
-
-    if (loading) return <LoadingState />;
-
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                <h2 className="text-xl lg:text-2xl font-black tracking-tight">Utilisateurs & Landlords</h2>
-                <span className="text-xs text-slate-400 font-bold bg-white border border-slate-100 px-3 py-1.5 rounded-full self-start sm:self-auto">
-                    {users.length} comptes
-                </span>
-            </div>
-
-            {/* Search */}
-            <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
-                <Search size={16} className="text-slate-400" />
-                <input
-                    type="text"
-                    placeholder="Rechercher un utilisateur..."
-                    className="flex-1 text-sm outline-none"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                />
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 border-b border-slate-100">
-                        <tr>
-                            {['Nom', 'Email', 'Rôle', 'Vérifié', 'Inscrit le'].map(h => (
-                                <th key={h} className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-slate-400">{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filtered.map(user => (
-                            <tr key={user.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 font-bold text-sm">{user.full_name}</td>
-                                <td className="px-6 py-4 text-slate-500 text-sm">{user.email}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`text-[10px] px-2 py-1 rounded-full font-black uppercase ${user.role === 'landlord' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                                        }`}>
-                                        {user.role}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {user.is_verified
-                                        ? <span className="text-green-600 font-bold text-sm">✅ Oui</span>
-                                        : <span className="text-slate-400 text-sm">❌ Non</span>}
-                                </td>
-                                <td className="px-6 py-4 text-xs text-slate-400">
-                                    {user.created_at ? new Date(user.created_at).toLocaleDateString('fr-FR') : '—'}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
-                {filtered.map(user => (
-                    <div key={user.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-4">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0 ${user.role === 'landlord' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                            }`}>
-                            {user.full_name?.charAt(0) || '?'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                                <p className="font-bold text-sm truncate">{user.full_name}</p>
-                                {user.is_verified && <span className="text-xs">✅</span>}
-                            </div>
-                            <p className="text-xs text-slate-400 truncate">{user.email}</p>
-                        </div>
-                        <span className={`text-[9px] px-2 py-1 rounded-full font-black uppercase flex-shrink-0 ${user.role === 'landlord' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                            }`}>
-                            {user.role}
-                        </span>
-                    </div>
+              </div>
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-white/70">Plateforme Manager</p>
+              <h1 className="max-w-xl text-4xl font-black tracking-tight sm:text-5xl">
+                Controle moderne pour gerer Rently.
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/75">
+                Moderez les annonces, verifiez les landlords, suivez les paiements, traitez les signalements et gardez une vue claire sur la performance.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-2">
+                {['Secure', 'Fast review', 'Kigali ops'].map((item) => (
+                  <span key={item} className="rounded-full border border-white/30 bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
+                    {item}
+                  </span>
                 ))}
+              </div>
             </div>
+          </section>
+
+          <section className="rounded-[28px] border border-violet-100 bg-white p-7 text-slate-900 shadow-2xl shadow-violet-100">
+            <div className="mb-6">
+              <h2 className="text-2xl font-black">Connexion admin</h2>
+              <p className="mt-1 text-sm text-slate-500">Acces reserve aux comptes autorises.</p>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <Field label="Email">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="input"
+                  placeholder="admin@rently.rw"
+                  required
+                />
+              </Field>
+              <Field label="Mot de passe">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="input"
+                  placeholder="Votre mot de passe"
+                  required
+                />
+              </Field>
+              {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
+              <button className="btn-primary w-full" disabled={loading}>
+                {loading ? 'Connexion...' : 'Se connecter'}
+              </button>
+            </form>
+          </section>
         </div>
-    );
+      </div>
+    </main>
+  );
 }
 
-// ── KYC MODULE ─────────────────────────────────────────────────────
-function KYCModule() {
-    const [kyc, setKyc] = useState([]);
-    const [loading, setLoading] = useState(true);
+export default function App() {
+  const [adminProfile, setAdminProfile] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [stats, setStats] = useState(defaultStats());
 
-    useEffect(() => {
-        supabase
-            .from('kyc_verifications')
-            .select('*, profiles:user_id(full_name, email)')
-            .eq('status', 'pending')
-            .then(({ data }) => { setKyc(data || []); setLoading(false); });
-    }, []);
+  useEffect(() => {
+    checkSession();
+  }, []);
 
-    if (loading) return <LoadingState />;
+  useEffect(() => {
+    if (adminProfile) fetchStats();
+  }, [adminProfile, refreshKey]);
 
-    return (
-        <div className="space-y-6">
-            <h2 className="text-xl lg:text-2xl font-black tracking-tight">Vérification Documents (KYC)</h2>
-            {kyc.length === 0 ? (
-                <EmptyState icon="🛡️" title="Aucune demande KYC en attente" subtitle="Toutes les vérifications ont été traitées." />
-            ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {kyc.map(item => (
-                        <div key={item.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                            <div className="flex justify-between items-start mb-5">
-                                <div>
-                                    <p className="font-bold">{item.profiles?.full_name}</p>
-                                    <p className="text-xs text-slate-500">{item.profiles?.email}</p>
-                                </div>
-                                <span className="bg-amber-100 text-amber-600 text-[10px] px-2 py-1 rounded-full font-black uppercase">En attente</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 mb-5">
-                                <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-100">
-                                    <img src={item.doc_front_url} alt="ID" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-100">
-                                    <img src={item.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button className="bg-slate-100 text-slate-600 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 flex items-center justify-center gap-2">
-                                    <XCircle size={16} /> Rejeter
-                                </button>
-                                <button className="bg-rose-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-rose-700 shadow-lg shadow-rose-200 flex items-center justify-center gap-2">
-                                    <CheckCircle size={16} /> Approuver
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+  async function checkSession() {
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) {
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      if (profile && isAuthorizedAdmin(profile)) setAdminProfile(profile);
+      else await supabase.auth.signOut();
+    }
+    setLoading(false);
+  }
+
+  async function fetchStats() {
+    const next = defaultStats();
+
+    const [
+      users,
+      tenants,
+      landlords,
+      listings,
+      pendingListings,
+      activeListings,
+      pendingKyc,
+      pendingReports,
+      visits,
+      pendingPayments,
+      revenue,
+    ] = await Promise.all([
+      countRows('profiles'),
+      countRows('profiles', (q) => q.eq('role', 'tenant')),
+      countRows('profiles', (q) => q.eq('role', 'landlord')),
+      countRows('listings'),
+      countRows('listings', (q) => q.eq('status', 'pending_review')),
+      countRows('listings', (q) => q.eq('status', 'active')),
+      countRows('kyc_verifications', (q) => q.eq('status', 'pending')),
+      countRows('platform_reports', (q) => q.eq('status', 'pending')),
+      countRows('visits'),
+      countRows('payment_sessions', (q) => q.eq('status', 'pending')),
+      fetchRevenue(),
+    ]);
+
+    next.totalUsers = users;
+    next.tenants = tenants;
+    next.landlords = landlords;
+    next.totalListings = listings;
+    next.pendingListings = pendingListings;
+    next.activeListings = activeListings;
+    next.pendingKyc = pendingKyc;
+    next.pendingReports = pendingReports;
+    next.totalVisits = visits;
+    next.pendingPayments = pendingPayments;
+    next.revenue = revenue;
+    setStats(next);
+  }
+
+  async function countRows(table, apply) {
+    let query = supabase.from(table).select('*', { count: 'exact', head: true });
+    if (apply) query = apply(query);
+    const { count, error } = await query;
+    if (error) return 0;
+    return count || 0;
+  }
+
+  async function fetchRevenue() {
+    const { data, error } = await supabase.from('platform_revenue').select('amount_rwf');
+    if (error) return 0;
+    return (data || []).reduce((sum, row) => sum + Number(row.amount_rwf || 0), 0);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setAdminProfile(null);
+  }
+
+  const badges = {
+    pendingListings: stats.pendingListings,
+    pendingKyc: stats.pendingKyc,
+    pendingReports: stats.pendingReports,
+  };
+
+  if (loading) return <FullPageLoader />;
+  if (!adminProfile) return <LoginScreen onLogin={setAdminProfile} />;
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
+      {sidebarOpen && <button aria-label="Fermer le menu" className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#6C3FC4] font-black text-white shadow-lg shadow-violet-100">R</div>
+            <div>
+              <p className="text-sm font-black leading-4">Rently Admin</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Rently workspace</p>
+            </div>
+          </div>
+          <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(false)}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="border-b border-slate-100 p-4">
+          <div className="rounded-2xl bg-slate-50 p-3">
+            <p className="truncate text-sm font-bold">{adminProfile.full_name || 'Admin'}</p>
+            <p className="truncate text-xs text-slate-500">{adminProfile.email}</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            const badge = tab.badge ? badges[tab.badge] : 0;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setSidebarOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${active ? 'bg-violet-50 text-violet-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon size={18} />
+                  {tab.label}
+                </span>
+                {badge > 0 && <span className="rounded-full bg-[#6C3FC4] px-2 py-0.5 text-[10px] font-black text-white">{badge}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-slate-100 p-3">
+          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-500 hover:bg-violet-50 hover:text-violet-700">
+            <LogOut size={18} />
+            Deconnexion
+          </button>
+        </div>
+      </aside>
+
+      <section className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(true)}>
+              <Menu size={22} />
+            </button>
+            <div>
+              <h1 className="text-lg font-black">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
+              <p className="hidden text-xs text-slate-500 sm:block">Gestion centrale de la plateforme Rently</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setRefreshKey((key) => key + 1)} className="btn-muted">
+              <RefreshCw size={16} />
+              <span className="hidden sm:inline">Rafraichir</span>
+            </button>
+            <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100">
+              <Bell size={19} />
+            </button>
+          </div>
+        </header>
+
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-8">
+          {activeTab === 'dashboard' && <Dashboard stats={stats} />}
+          {activeTab === 'moderation' && <Moderation admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />}
+          {activeTab === 'users' && <UsersModule onChange={() => setRefreshKey((key) => key + 1)} />}
+          {activeTab === 'kyc' && <KycModule admin={adminProfile} onChange={() => setRefreshKey((key) => key + 1)} />}
+          {activeTab === 'reports' && <ReportsModule onChange={() => setRefreshKey((key) => key + 1)} />}
+          {activeTab === 'visits' && <VisitsModule />}
+          {activeTab === 'payments' && <PaymentsModule />}
+          {activeTab === 'system' && <SystemModule stats={stats} />}
+        </main>
+      </section>
+    </div>
+  );
+}
+
+function defaultStats() {
+  return {
+    totalUsers: 0,
+    tenants: 0,
+    landlords: 0,
+    totalListings: 0,
+    pendingListings: 0,
+    activeListings: 0,
+    pendingKyc: 0,
+    pendingReports: 0,
+    totalVisits: 0,
+    pendingPayments: 0,
+    revenue: 0,
+  };
+}
+
+function Dashboard({ stats }) {
+  const cards = [
+    { label: 'Utilisateurs', value: stats.totalUsers, helper: `${stats.tenants} tenants, ${stats.landlords} landlords`, icon: Users },
+    { label: 'Listings actifs', value: stats.activeListings, helper: `${stats.pendingListings} en attente`, icon: Home },
+    { label: 'KYC a traiter', value: stats.pendingKyc, helper: 'Landlords en verification', icon: ShieldCheck },
+    { label: 'Signalements', value: stats.pendingReports, helper: 'Tickets ouverts', icon: AlertTriangle },
+    { label: 'Visites', value: stats.totalVisits, helper: 'Demandes totales', icon: CalendarDays },
+    { label: 'Revenus', value: formatMoney(stats.revenue), helper: `${stats.pendingPayments} paiements en attente`, icon: BarChart3 },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {cards.map((card) => (
+          <KpiCard key={card.label} {...card} />
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="panel">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="section-title">Priorites operations</h2>
+              <p className="section-subtitle">Ce qui demande une action admin rapide.</p>
+            </div>
+            <SlidersHorizontal size={18} className="text-slate-400" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <PriorityCard label="Listings a moderer" value={stats.pendingListings} tone="violet" />
+            <PriorityCard label="KYC en attente" value={stats.pendingKyc} tone="amber" />
+            <PriorityCard label="Signalements ouverts" value={stats.pendingReports} tone="blue" />
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2 className="section-title">Sante plateforme</h2>
+          <div className="mt-5 space-y-4">
+            <HealthRow label="Listings actifs" value={stats.activeListings} total={Math.max(stats.totalListings, 1)} />
+            <HealthRow label="Utilisateurs landlords" value={stats.landlords} total={Math.max(stats.totalUsers, 1)} />
+            <HealthRow label="Demandes KYC" value={stats.pendingKyc} total={Math.max(stats.landlords, 1)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, helper, icon: Icon }) {
+  return (
+    <div className="panel">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-500">{label}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight">{value}</p>
+          <p className="mt-2 text-xs font-semibold text-slate-400">{helper}</p>
+        </div>
+        <div className="rounded-2xl bg-violet-50 p-3 text-violet-700">
+          <Icon size={22} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriorityCard({ label, value, tone }) {
+  const classes = {
+    violet: 'bg-violet-50 text-violet-700',
+    amber: 'bg-amber-50 text-amber-700',
+    blue: 'bg-blue-50 text-blue-700',
+  };
+  return (
+    <div className={`rounded-2xl p-4 ${classes[tone]}`}>
+      <p className="text-3xl font-black">{value}</p>
+      <p className="mt-1 text-sm font-bold">{label}</p>
+    </div>
+  );
+}
+
+function HealthRow({ label, value, total }) {
+  const pct = Math.min(100, Math.round((Number(value || 0) / Number(total || 1)) * 100));
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="font-bold text-slate-600">{label}</span>
+        <span className="text-slate-400">{pct}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-[#6C3FC4]" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function Moderation({ admin, onChange }) {
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState('pending_review');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    fetchRows();
+  }, [status]);
+
+  async function fetchRows() {
+    setLoading(true);
+    let query = supabase
+      .from('listings')
+      .select('*, profiles:landlord_id(id, full_name, email, is_verified), locations:location_id(district, sector)')
+      .order('submitted_at', { ascending: true, nullsFirst: false })
+      .limit(80);
+    if (status !== 'all') query = query.eq('status', status);
+    const { data } = await query;
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  async function reviewListing(listing, nextStatus, note = '') {
+    const update = {
+      status: nextStatus,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: admin.id,
+      review_note: note || null,
+    };
+    if (nextStatus === 'active') {
+      update.rejection_reason = null;
+      update.rejection_category = null;
+    }
+    if (nextStatus === 'revision_needed') update.revision_count = Number(listing.revision_count || 0) + 1;
+
+    const { error } = await supabase.from('listings').update(update).eq('id', listing.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await supabase.from('listing_review_history').insert({
+      listing_id: listing.id,
+      admin_id: admin.id,
+      action: nextStatus === 'active' ? 'approved' : nextStatus === 'rejected' ? 'rejected' : 'revision_requested',
+      note: note || null,
+      previous_status: listing.status,
+      new_status: nextStatus,
+    });
+
+    await supabase.from('notifications').insert({
+      user_id: listing.landlord_id,
+      title: nextStatus === 'active' ? 'Listing approved' : nextStatus === 'rejected' ? 'Listing rejected' : 'Revision needed',
+      body: note || `Your listing "${listing.title}" has been reviewed.`,
+      type: 'listing_review',
+      data: { listing_id: listing.id, status: nextStatus },
+    }).then(() => null);
+
+    setSelected(null);
+    await fetchRows();
+    onChange?.();
+  }
+
+  const filtered = rows.filter((row) => {
+    const haystack = `${row.title} ${row.description} ${row.profiles?.full_name} ${row.profiles?.email} ${row.locations?.district}`;
+    return safeLower(haystack).includes(safeLower(search));
+  });
+
+  return (
+    <div className="space-y-5">
+      <Toolbar
+        search={search}
+        setSearch={setSearch}
+        placeholder="Rechercher une annonce, landlord, district..."
+        right={
+          <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">Tous les statuts</option>
+            {LISTING_STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}
+          </select>
+        }
+      />
+
+      <div className="panel overflow-hidden p-0">
+        <Table
+          loading={loading}
+          empty="Aucune annonce pour ce filtre."
+          columns={['Annonce', 'Landlord', 'Prix', 'Statut', 'Soumise', 'Actions']}
+          rows={filtered.map((listing) => (
+            <tr key={listing.id} className="table-row">
+              <td className="table-cell">
+                <p className="font-black">{listing.title}</p>
+                <p className="text-xs text-slate-400">{listing.locations?.district || 'Kigali'} {listing.locations?.sector ? `- ${listing.locations.sector}` : ''}</p>
+              </td>
+              <td className="table-cell">
+                <p className="font-bold">{listing.profiles?.full_name || 'Unknown'}</p>
+                <p className="text-xs text-slate-400">{listing.profiles?.email}</p>
+              </td>
+              <td className="table-cell font-bold">{formatMoney(listing.monthly_rent)}</td>
+              <td className="table-cell"><StatusBadge value={listing.status} /></td>
+              <td className="table-cell text-xs text-slate-500">{formatDate(listing.submitted_at || listing.created_at)}</td>
+              <td className="table-cell">
+                <button className="btn-muted" onClick={() => setSelected(listing)}>
+                  <Eye size={15} />
+                  Examiner
+                </button>
+              </td>
+            </tr>
+          ))}
+        />
+      </div>
+
+      {selected && (
+        <ListingReviewModal
+          listing={selected}
+          onClose={() => setSelected(null)}
+          onApprove={(note) => reviewListing(selected, 'active', note)}
+          onRevision={(note) => reviewListing(selected, 'revision_needed', note)}
+          onReject={(note) => reviewListing(selected, 'rejected', note)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ListingReviewModal({ listing, onClose, onApprove, onRevision, onReject }) {
+  const [note, setNote] = useState('');
+  return (
+    <Modal title="Review listing" onClose={onClose}>
+      <div className="space-y-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Annonce</p>
+          <h3 className="mt-1 text-2xl font-black">{listing.title}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{listing.description || 'Aucune description.'}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Info label="Prix" value={formatMoney(listing.monthly_rent)} />
+          <Info label="Type" value={listing.listing_category || listing.type || 'residential'} />
+          <Info label="District" value={listing.locations?.district || 'N/A'} />
+        </div>
+        <Field label="Note admin">
+          <textarea className="input min-h-28 resize-y" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Decision, raison, demande de correction..." />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <button className="btn-success" onClick={() => onApprove(note)}>Approuver</button>
+          <button className="btn-muted justify-center" onClick={() => onRevision(note)}>Demander revision</button>
+          <button className="btn-danger" onClick={() => onReject(note)}>Rejeter</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function UsersModule({ onChange }) {
+  const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState('all');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRows();
+  }, []);
+
+  async function fetchRows() {
+    setLoading(true);
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(300);
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  async function updateUser(user, patch) {
+    const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await fetchRows();
+    onChange?.();
+  }
+
+  const filtered = rows.filter((user) => {
+    const roleOk = role === 'all' || user.role === role;
+    const haystack = `${user.full_name} ${user.email} ${user.phone} ${user.role}`;
+    return roleOk && safeLower(haystack).includes(safeLower(search));
+  });
+
+  return (
+    <div className="space-y-5">
+      <Toolbar
+        search={search}
+        setSearch={setSearch}
+        placeholder="Rechercher nom, email, telephone..."
+        right={
+          <select className="select" value={role} onChange={(event) => setRole(event.target.value)}>
+            <option value="all">Tous les roles</option>
+            <option value="tenant">Tenants</option>
+            <option value="landlord">Landlords</option>
+            <option value="admin">Admins</option>
+          </select>
+        }
+      />
+      <div className="panel overflow-hidden p-0">
+        <Table
+          loading={loading}
+          empty="Aucun utilisateur trouve."
+          columns={['Utilisateur', 'Role', 'Verification', 'Langue', 'Inscription', 'Actions']}
+          rows={filtered.map((user) => (
+            <tr key={user.id} className="table-row">
+              <td className="table-cell">
+                <p className="font-black">{user.full_name || 'Sans nom'}</p>
+                <p className="text-xs text-slate-400">{user.email}</p>
+              </td>
+              <td className="table-cell"><StatusBadge value={user.role} /></td>
+              <td className="table-cell">{user.is_verified ? <StatusBadge value="approved" /> : <StatusBadge value="pending" />}</td>
+              <td className="table-cell text-sm uppercase text-slate-500">{user.preferred_language || 'en'}</td>
+              <td className="table-cell text-xs text-slate-500">{formatDate(user.created_at)}</td>
+              <td className="table-cell">
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn-muted" onClick={() => updateUser(user, { is_verified: !user.is_verified })}>
+                    {user.is_verified ? 'Retirer verification' : 'Verifier'}
+                  </button>
+                  {user.role !== 'admin' && (
+                    <button className="btn-muted" onClick={() => updateUser(user, { role: user.role === 'tenant' ? 'landlord' : 'tenant' })}>
+                      Basculer role
+                    </button>
+                  )}
                 </div>
-            )}
-        </div>
-    );
+              </td>
+            </tr>
+          ))}
+        />
+      </div>
+    </div>
+  );
 }
 
-// ── REPORTS MODULE ─────────────────────────────────────────────────
-function ReportsModule() {
-    const [reports, setReports] = useState([]);
-    const [loading, setLoading] = useState(true);
+function KycModule({ admin, onChange }) {
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState('pending');
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
 
-    useEffect(() => {
-        supabase
-            .from('platform_reports')
-            .select('*, reporter:profiles!reporter_id(full_name), listing:listings(title)')
-            .order('created_at', { ascending: false })
-            .then(({ data }) => { setReports(data || []); setLoading(false); });
-    }, []);
+  useEffect(() => {
+    fetchRows();
+  }, [status]);
 
-    if (loading) return <LoadingState />;
+  async function fetchRows() {
+    setLoading(true);
+    let query = supabase
+      .from('kyc_verifications')
+      .select('*, profiles:user_id(id, full_name, email, phone)')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (status !== 'all') query = query.eq('status', status);
+    const { data } = await query;
+    setRows(data || []);
+    setLoading(false);
+  }
 
-    return (
-        <div className="space-y-6">
-            <h2 className="text-xl lg:text-2xl font-black tracking-tight">Signalements Plateforme</h2>
-            {reports.length === 0 ? (
-                <EmptyState icon="🚩" title="Aucun signalement" subtitle="La plateforme est propre !" />
-            ) : (
-                <>
-                    {/* Desktop table */}
-                    <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 border-b border-slate-100">
-                                <tr>
-                                    {['Type', 'Cible', 'Reporter', 'Status', 'Date'].map(h => (
-                                        <th key={h} className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-slate-400">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {reports.map(report => (
-                                    <tr key={report.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4">
-                                            <span className="bg-rose-50 text-rose-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">{report.category}</span>
-                                        </td>
-                                        <td className="px-6 py-4 font-medium text-sm">{report.listing?.title || 'Utilisateur'}</td>
-                                        <td className="px-6 py-4 text-slate-500 text-sm">{report.reporter?.full_name}</td>
-                                        <td className="px-6 py-4 text-sm italic">{report.status}</td>
-                                        <td className="px-6 py-4 text-xs text-slate-400">{new Date(report.created_at).toLocaleDateString('fr-FR')}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+  async function reviewKyc(item, nextStatus, note = '') {
+    const { error } = await supabase
+      .from('kyc_verifications')
+      .update({
+        status: nextStatus,
+        rejection_note: nextStatus === 'rejected' ? note : null,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', item.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-                    {/* Mobile cards */}
-                    <div className="md:hidden space-y-3">
-                        {reports.map(report => (
-                            <div key={report.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className="bg-rose-50 text-rose-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">{report.category}</span>
-                                    <span className="text-xs text-slate-400">{new Date(report.created_at).toLocaleDateString('fr-FR')}</span>
-                                </div>
-                                <p className="font-bold text-sm">{report.listing?.title || 'Utilisateur'}</p>
-                                <div className="flex justify-between mt-2 text-xs text-slate-400">
-                                    <span>Par : {report.reporter?.full_name}</span>
-                                    <span className="italic">{report.status}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-}
+    if (nextStatus === 'approved') {
+      await supabase.from('profiles').update({ is_verified: true }).eq('id', item.user_id);
+    }
 
-// ── Shared UI components ───────────────────────────────────────────
-function LoadingState() {
-    return (
-        <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-                <div className="w-10 h-10 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-slate-400 text-sm font-medium">Chargement...</p>
+    await supabase.from('notifications').insert({
+      user_id: item.user_id,
+      title: nextStatus === 'approved' ? 'KYC approved' : 'KYC rejected',
+      body: note || 'Your verification request has been reviewed.',
+      type: 'kyc_review',
+      data: { status: nextStatus, admin_id: admin.id },
+    }).then(() => null);
+
+    setSelected(null);
+    await fetchRows();
+    onChange?.();
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="all">Tous les statuts</option>
+          {KYC_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {loading ? <LoadingState /> : rows.length === 0 ? <EmptyState title="Aucune demande KYC" /> : rows.map((item) => (
+          <button key={item.id} className="panel text-left hover:border-violet-200" onClick={() => setSelected(item)}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-black">{item.profiles?.full_name || 'Utilisateur'}</p>
+                <p className="mt-1 text-sm text-slate-500">{item.profiles?.email}</p>
+              </div>
+              <StatusBadge value={item.status} />
             </div>
-        </div>
-    );
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <Info label="Document" value={item.document_type} />
+              <Info label="Soumis" value={formatDate(item.created_at)} />
+            </div>
+          </button>
+        ))}
+      </div>
+      {selected && <KycModal item={selected} onClose={() => setSelected(null)} onApprove={(note) => reviewKyc(selected, 'approved', note)} onReject={(note) => reviewKyc(selected, 'rejected', note)} />}
+    </div>
+  );
 }
 
-function EmptyState({ icon, title, subtitle }) {
-    return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-16 text-center">
-            <div className="text-5xl mb-4">{icon}</div>
-            <p className="text-lg font-bold text-slate-700 mb-2">{title}</p>
-            <p className="text-sm text-slate-400">{subtitle}</p>
+function KycModal({ item, onClose, onApprove, onReject }) {
+  const [note, setNote] = useState('');
+  const [urls, setUrls] = useState({});
+
+  useEffect(() => {
+    async function loadUrls() {
+      const entries = await Promise.all(
+        ['doc_front_url', 'doc_back_url', 'selfie_url'].map(async (key) => {
+          const path = item[key];
+          if (!path) return [key, null];
+          if (String(path).startsWith('http')) return [key, path];
+          const { data } = await supabase.storage.from('kyc-documents').createSignedUrl(path, 3600);
+          return [key, data?.signedUrl || null];
+        })
+      );
+      setUrls(Object.fromEntries(entries));
+    }
+    loadUrls();
+  }, [item]);
+
+  return (
+    <Modal title="Verification KYC" onClose={onClose}>
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-xl font-black">{item.profiles?.full_name}</h3>
+          <p className="text-sm text-slate-500">{item.profiles?.email}</p>
         </div>
-    );
+        <div className="grid gap-3 sm:grid-cols-3">
+          <KycImage label="Recto document" src={urls.doc_front_url} />
+          <KycImage label="Verso document" src={urls.doc_back_url} />
+          <KycImage label="Selfie" src={urls.selfie_url} />
+        </div>
+        <Field label="Note de decision">
+          <textarea className="input min-h-24" value={note} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button className="btn-success" onClick={() => onApprove(note)}>Approuver KYC</button>
+          <button className="btn-danger" onClick={() => onReject(note)}>Rejeter KYC</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function KycImage({ label, src }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+        {src ? <img src={src} alt={label} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">Indisponible</div>}
+      </div>
+    </div>
+  );
+}
+
+function ReportsModule({ onChange }) {
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState('pending');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRows();
+  }, [status]);
+
+  async function fetchRows() {
+    setLoading(true);
+    let query = supabase
+      .from('platform_reports')
+      .select('*, reporter:profiles!reporter_id(full_name, email), target:profiles!target_user_id(full_name, email), listing:listings(title)')
+      .order('created_at', { ascending: false })
+      .limit(150);
+    if (status !== 'all') query = query.eq('status', status);
+    const { data } = await query;
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  async function updateReport(report, nextStatus) {
+    const { error } = await supabase.from('platform_reports').update({ status: nextStatus, reviewed_at: new Date().toISOString() }).eq('id', report.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await fetchRows();
+    onChange?.();
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="all">Tous les statuts</option>
+          {REPORT_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </div>
+      <div className="panel overflow-hidden p-0">
+        <Table
+          loading={loading}
+          empty="Aucun signalement."
+          columns={['Categorie', 'Cible', 'Reporter', 'Statut', 'Date', 'Actions']}
+          rows={rows.map((report) => (
+            <tr key={report.id} className="table-row">
+              <td className="table-cell font-bold">{report.category}</td>
+              <td className="table-cell">
+                <p className="font-bold">{report.listing?.title || report.target?.full_name || 'Utilisateur'}</p>
+                <p className="text-xs text-slate-400">{report.description || 'Aucune description'}</p>
+              </td>
+              <td className="table-cell text-sm">{report.reporter?.full_name || 'N/A'}</td>
+              <td className="table-cell"><StatusBadge value={report.status} /></td>
+              <td className="table-cell text-xs text-slate-500">{formatDate(report.created_at)}</td>
+              <td className="table-cell">
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn-muted" onClick={() => updateReport(report, 'reviewed')}>Marquer vu</button>
+                  <button className="btn-success" onClick={() => updateReport(report, 'resolved')}>Resoudre</button>
+                  <button className="btn-muted" onClick={() => updateReport(report, 'dismissed')}>Ignorer</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function VisitsModule() {
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState('all');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRows();
+  }, [status]);
+
+  async function fetchRows() {
+    setLoading(true);
+    let query = supabase
+      .from('visits')
+      .select('*, listing:listings(title), tenant:profiles!tenant_id(full_name, email), landlord:profiles!landlord_id(full_name, email)')
+      .order('created_at', { ascending: false })
+      .limit(150);
+    if (status !== 'all') query = query.eq('status', status);
+    const { data } = await query;
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="all">Toutes les visites</option>
+          <option value="pending">En attente</option>
+          <option value="confirmed">Confirmees</option>
+          <option value="cancelled">Annulees</option>
+        </select>
+      </div>
+      <div className="panel overflow-hidden p-0">
+        <Table
+          loading={loading}
+          empty="Aucune visite."
+          columns={['Listing', 'Tenant', 'Landlord', 'Creneau', 'Statut']}
+          rows={rows.map((visit) => (
+            <tr key={visit.id} className="table-row">
+              <td className="table-cell font-bold">{visit.listing?.title || 'N/A'}</td>
+              <td className="table-cell text-sm">{visit.tenant?.full_name || 'N/A'}</td>
+              <td className="table-cell text-sm">{visit.landlord?.full_name || 'N/A'}</td>
+              <td className="table-cell text-sm">{visit.visit_date} {visit.time_slot}</td>
+              <td className="table-cell"><StatusBadge value={visit.status} /></td>
+            </tr>
+          ))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PaymentsModule() {
+  const [sessions, setSessions] = useState([]);
+  const [revenue, setRevenue] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchRows() {
+      setLoading(true);
+      const [{ data: sessionRows }, { data: revenueRows }] = await Promise.all([
+        supabase.from('payment_sessions').select('*, profiles:user_id(full_name, email)').order('created_at', { ascending: false }).limit(100),
+        supabase.from('platform_revenue').select('*, profiles:user_id(full_name, email)').order('recorded_at', { ascending: false }).limit(100),
+      ]);
+      setSessions(sessionRows || []);
+      setRevenue(revenueRows || []);
+      setLoading(false);
+    }
+    fetchRows();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard label="Revenus encaisses" value={formatMoney(revenue.reduce((sum, row) => sum + Number(row.amount_rwf || 0), 0))} helper={`${revenue.length} transactions`} icon={BarChart3} />
+        <KpiCard label="Sessions paiement" value={sessions.length} helper="Dernieres demandes" icon={CreditCard} />
+        <KpiCard label="Paiements pending" value={sessions.filter((row) => row.status === 'pending').length} helper="A surveiller" icon={Clock3} />
+      </div>
+
+      <div className="panel overflow-hidden p-0">
+        <Table
+          loading={loading}
+          empty="Aucun paiement."
+          columns={['Utilisateur', 'District', 'Montant', 'Methode', 'Statut', 'Date']}
+          rows={sessions.map((row) => (
+            <tr key={row.id} className="table-row">
+              <td className="table-cell">{row.profiles?.full_name || 'N/A'}</td>
+              <td className="table-cell font-bold">{row.district_name}</td>
+              <td className="table-cell">{formatMoney(row.amount_rwf)}</td>
+              <td className="table-cell">{row.payment_method}</td>
+              <td className="table-cell"><StatusBadge value={row.status} /></td>
+              <td className="table-cell text-xs text-slate-500">{formatDate(row.created_at)}</td>
+            </tr>
+          ))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SystemModule({ stats }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="panel">
+        <h2 className="section-title">Checklist admin</h2>
+        <div className="mt-5 space-y-3">
+          <ChecklistItem done={stats.pendingListings === 0} label="Aucune annonce en attente de moderation" />
+          <ChecklistItem done={stats.pendingKyc === 0} label="Aucune demande KYC en attente" />
+          <ChecklistItem done={stats.pendingReports === 0} label="Aucun signalement ouvert" />
+          <ChecklistItem done={stats.pendingPayments === 0} label="Aucun paiement pending" />
+        </div>
+      </div>
+      <div className="panel">
+        <h2 className="section-title">Configuration</h2>
+        <div className="mt-5 space-y-4 text-sm">
+          <Info label="Supabase" value="Connecte via VITE_SUPABASE_URL" />
+          <Info label="Securite" value="Acces limite aux admins autorises" />
+          <Info label="Modules" value="Listings, Users, KYC, Reports, Visits, Payments" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChecklistItem({ done, label }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+      {done ? <CheckCircle2 className="text-emerald-600" size={20} /> : <XCircle className="text-red-600" size={20} />}
+      <span className="text-sm font-bold text-slate-700">{label}</span>
+    </div>
+  );
+}
+
+function Toolbar({ search, setSearch, placeholder, right }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:flex-row md:items-center">
+      <div className="flex flex-1 items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+        <Search size={17} className="text-slate-400" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={placeholder} />
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function Table({ columns, rows, loading, empty }) {
+  if (loading) return <LoadingState />;
+  if (!rows.length) return <EmptyState title={empty} />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-left">
+        <thead className="bg-slate-50">
+          <tr>
+            {columns.map((column) => (
+              <th key={column} className="px-5 py-4 text-[11px] font-black uppercase tracking-widest text-slate-400">{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">{rows}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-xl font-black">{title}</h2>
+          <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3">
+      <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-bold text-slate-800">{value || 'N/A'}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function EmptyState({ title = 'Aucune donnee' }) {
+  return (
+    <div className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white p-8 text-center">
+      <Lock className="mb-3 text-slate-300" size={32} />
+      <p className="font-black text-slate-700">{title}</p>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex min-h-48 items-center justify-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#6C3FC4] border-t-transparent" />
+    </div>
+  );
+}
+
+function FullPageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <LoadingState />
+    </div>
+  );
 }
