@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   Bell,
@@ -8,22 +9,30 @@ import {
   ChevronRight,
   Clock3,
   CreditCard,
+  Database,
   Eye,
   FileCheck2,
+  FileText,
   Home,
   LayoutDashboard,
   Lock,
   LogOut,
   Menu,
+  Package,
   RefreshCw,
   Search,
+  Server,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   UserCheck,
   Users,
+  Wifi,
+  WifiOff,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { isAuthorizedAdmin } from './adminConfig';
@@ -1101,25 +1110,260 @@ function PaymentsModule() {
 
 function SystemModule({ stats }) {
   const { t } = useI18n();
+  const formatDate = useFormatDate();
+
+  const [activity, setActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [connStatus, setConnStatus] = useState('checking');
+  const [adminCount, setAdminCount] = useState(null);
+  const [dbProject, setDbProject] = useState('');
+
+  useEffect(() => {
+    checkConnection();
+    fetchActivity();
+    fetchAdminCount();
+    const url = import.meta.env.VITE_SUPABASE_URL || '';
+    const match = url.match(/https:\/\/([^.]+)\./);
+    setDbProject(match ? match[1] : url);
+  }, []);
+
+  async function checkConnection() {
+    setConnStatus('checking');
+    try {
+      const { error } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
+      setConnStatus(error ? 'fail' : 'ok');
+    } catch {
+      setConnStatus('fail');
+    }
+  }
+
+  async function fetchAdminCount() {
+    const { count } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'admin');
+    setAdminCount(count ?? 0);
+  }
+
+  async function fetchActivity() {
+    setActivityLoading(true);
+    const [
+      { data: listings },
+      { data: kycs },
+      { data: reports },
+      { data: visits },
+      { data: payments },
+    ] = await Promise.all([
+      supabase.from('listings').select('id, title, created_at, status').order('created_at', { ascending: false }).limit(4),
+      supabase.from('kyc_verifications').select('id, created_at, status, profiles:user_id(full_name)').order('created_at', { ascending: false }).limit(3),
+      supabase.from('platform_reports').select('id, created_at, category, status').order('created_at', { ascending: false }).limit(3),
+      supabase.from('visits').select('id, created_at, status, listing:listings(title)').order('created_at', { ascending: false }).limit(3),
+      supabase.from('payment_sessions').select('id, created_at, status, amount_rwf, payment_method').order('created_at', { ascending: false }).limit(3),
+    ]);
+
+    const events = [
+      ...(listings || []).map((r) => ({ type: 'listing', label: r.title || 'Listing', status: r.status, ts: r.created_at, icon: FileText })),
+      ...(kycs || []).map((r) => ({ type: 'kyc', label: r.profiles?.full_name || 'KYC', status: r.status, ts: r.created_at, icon: ShieldCheck })),
+      ...(reports || []).map((r) => ({ type: 'report', label: r.category || 'Report', status: r.status, ts: r.created_at, icon: AlertTriangle })),
+      ...(visits || []).map((r) => ({ type: 'visit', label: r.listing?.title || 'Visit', status: r.status, ts: r.created_at, icon: CalendarDays })),
+      ...(payments || []).map((r) => ({ type: 'payment', label: r.payment_method || 'Payment', status: r.status, ts: r.created_at, icon: CreditCard, amount: r.amount_rwf })),
+    ].sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 12);
+
+    setActivity(events);
+    setActivityLoading(false);
+  }
+
+  const checks = [
+    { done: stats.pendingListings === 0, label: t('system.noListingsPending'), count: stats.pendingListings },
+    { done: stats.pendingKyc === 0, label: t('system.noKycPending'), count: stats.pendingKyc },
+    { done: stats.pendingReports === 0, label: t('system.noReportsPending'), count: stats.pendingReports },
+    { done: stats.pendingPayments === 0, label: t('system.noPaymentsPending'), count: stats.pendingPayments },
+  ];
+  const allOk = checks.every((c) => c.done);
+  const issuesCount = checks.filter((c) => !c.done).length;
+
+  const metricCards = [
+    { label: t('dashboard.users'), value: stats.totalUsers, icon: Users, color: 'text-violet-600', bg: 'bg-violet-50' },
+    { label: t('dashboard.activeListings'), value: stats.activeListings, icon: Home, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: t('dashboard.visits'), value: stats.totalVisits, icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: t('dashboard.revenue'), value: formatMoney(stats.revenue), icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50' },
+  ];
+
+  const typeLabel = {
+    listing: t('system.activityListing'),
+    kyc: t('system.activityKyc'),
+    report: t('system.activityReport'),
+    visit: t('system.activityVisit'),
+    payment: t('system.activityPayment'),
+  };
+
+  const typeColor = {
+    listing: 'bg-violet-50 text-violet-600',
+    kyc: 'bg-blue-50 text-blue-600',
+    report: 'bg-red-50 text-red-600',
+    visit: 'bg-emerald-50 text-emerald-600',
+    payment: 'bg-amber-50 text-amber-600',
+  };
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="panel">
-        <h2 className="section-title">{t('system.checklistTitle')}</h2>
-        <div className="mt-5 space-y-3">
-          <ChecklistItem done={stats.pendingListings === 0} label={t('system.noListingsPending')} />
-          <ChecklistItem done={stats.pendingKyc === 0} label={t('system.noKycPending')} />
-          <ChecklistItem done={stats.pendingReports === 0} label={t('system.noReportsPending')} />
-          <ChecklistItem done={stats.pendingPayments === 0} label={t('system.noPaymentsPending')} />
+    <div className="space-y-6">
+
+      {/* Platform health banner */}
+      <div className={`flex items-center gap-4 rounded-3xl p-5 ${allOk ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'} text-white shadow-lg`}>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${allOk ? 'bg-white/20' : 'bg-white/20'}`}>
+          {allOk ? <Sparkles size={24} /> : <AlertTriangle size={24} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-black text-lg">{allOk ? t('system.checklistOk') : `${issuesCount} ${t('system.checklistIssues')}`}</p>
+          <p className="text-sm text-white/80">Rently Admin · {new Date().toLocaleDateString()}</p>
+        </div>
+        <div className="hidden gap-2 sm:flex">
+          {checks.map((c, i) => (
+            <div key={i} title={c.label} className={`flex h-9 w-9 items-center justify-center rounded-xl ${c.done ? 'bg-white/20' : 'bg-white/30'}`}>
+              {c.done
+                ? <CheckCircle2 size={18} className="text-white" />
+                : <span className="text-xs font-black text-white">{c.count}</span>}
+            </div>
+          ))}
         </div>
       </div>
-      <div className="panel">
-        <h2 className="section-title">{t('system.configTitle')}</h2>
-        <div className="mt-5 space-y-4 text-sm">
-          <Info label={t('system.supabase')} value={t('system.supabaseValue')} />
-          <Info label={t('system.security')} value={t('system.securityValue')} />
-          <Info label={t('system.modules')} value={t('system.modulesValue')} />
+
+      {/* Metrics row */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metricCards.map((m) => {
+          const Icon = m.icon;
+          return (
+            <div key={m.label} className="panel flex items-center gap-4">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${m.bg}`}>
+                <Icon size={20} className={m.color} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-400 truncate">{m.label}</p>
+                <p className="text-xl font-black tracking-tight">{m.value}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+
+        {/* Activity feed */}
+        <div className="panel">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="section-title">{t('system.activityTitle')}</h2>
+              <p className="section-subtitle">{t('system.activityDesc')}</p>
+            </div>
+            <Activity size={18} className="text-slate-400" />
+          </div>
+          {activityLoading ? (
+            <LoadingState />
+          ) : activity.length === 0 ? (
+            <EmptyState title={t('system.activityEmpty')} />
+          ) : (
+            <div className="space-y-1">
+              {activity.map((ev, i) => {
+                const Icon = ev.icon;
+                return (
+                  <div key={i} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-slate-50 transition">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs ${typeColor[ev.type]}`}>
+                      <Icon size={14} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-800">{ev.label}</p>
+                      <p className="text-xs text-slate-400">{typeLabel[ev.type]}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <StatusBadge value={ev.status} />
+                      <p className="text-[10px] text-slate-400">{formatDate(ev.ts)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-5">
+
+          {/* Checklist */}
+          <div className="panel">
+            <h2 className="section-title mb-4">{t('system.checklistTitle')}</h2>
+            <div className="space-y-2.5">
+              {checks.map((c, i) => (
+                <div key={i} className={`flex items-center gap-3 rounded-2xl p-3 ${c.done ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                  {c.done
+                    ? <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+                    : <XCircle size={18} className="shrink-0 text-red-500" />}
+                  <span className={`flex-1 text-sm font-bold ${c.done ? 'text-emerald-800' : 'text-red-800'}`}>{c.label}</span>
+                  {!c.done && <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">{c.count}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Infrastructure */}
+          <div className="panel">
+            <div className="mb-4 flex items-center gap-2">
+              <Server size={16} className="text-slate-400" />
+              <h2 className="section-title">{t('system.connTitle')}</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-sm font-bold text-slate-600">{t('system.connStatus')}</span>
+                {connStatus === 'checking' && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                    {t('system.connChecking')}
+                  </span>
+                )}
+                {connStatus === 'ok' && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                    <Wifi size={13} />
+                    {t('system.connOk')}
+                  </span>
+                )}
+                {connStatus === 'fail' && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-red-600">
+                    <WifiOff size={13} />
+                    {t('system.connFail')}
+                  </span>
+                )}
+              </div>
+              <InfraRow label={t('system.dbProject')} value={dbProject || '—'} />
+              <InfraRow label={t('system.dbRegion')} value={t('system.dbRegionValue')} />
+              <InfraRow label={t('system.authMode')} value={t('system.authModeValue')} />
+              <InfraRow label={t('system.storage')} value={t('system.storageValue')} />
+              <InfraRow label={t('system.adminCount')} value={adminCount !== null ? String(adminCount) : '…'} />
+            </div>
+          </div>
+
+          {/* Build */}
+          <div className="panel">
+            <div className="mb-4 flex items-center gap-2">
+              <Zap size={16} className="text-slate-400" />
+              <h2 className="section-title">{t('system.buildTitle')}</h2>
+            </div>
+            <div className="space-y-3">
+              <InfraRow label={t('system.buildEnv')} value={t('system.buildEnvValue')} highlight />
+              <InfraRow label={t('system.buildFw')} value={t('system.buildFwValue')} />
+              <InfraRow label={t('system.buildCss')} value={t('system.buildCssValue')} />
+            </div>
+          </div>
+
         </div>
       </div>
+    </div>
+  );
+}
+
+function InfraRow({ label, value, highlight }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-2.5">
+      <span className="text-xs font-bold text-slate-500">{label}</span>
+      <span className={`max-w-[55%] truncate text-right text-xs font-black ${highlight ? 'text-violet-700' : 'text-slate-800'}`}>{value}</span>
     </div>
   );
 }
