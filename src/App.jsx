@@ -27,35 +27,42 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { isAuthorizedAdmin } from './adminConfig';
+import { useI18n } from './i18n.jsx';
 
 const LISTING_STATUSES = ['pending_review', 'revision_needed', 'active', 'rejected', 'draft'];
 const REPORT_STATUSES = ['pending', 'reviewed', 'resolved', 'dismissed'];
 const KYC_STATUSES = ['pending', 'approved', 'rejected'];
 
-const TABS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'moderation', label: 'Moderation', icon: FileCheck2, badge: 'pendingListings' },
-  { id: 'users', label: 'Utilisateurs', icon: Users },
-  { id: 'kyc', label: 'KYC', icon: ShieldCheck, badge: 'pendingKyc' },
-  { id: 'reports', label: 'Signalements', icon: AlertTriangle, badge: 'pendingReports' },
-  { id: 'visits', label: 'Visites', icon: CalendarDays },
-  { id: 'payments', label: 'Paiements', icon: CreditCard },
-  { id: 'system', label: 'Systeme', icon: Settings },
-];
+function useTabs() {
+  const { t } = useI18n();
+  return [
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { id: 'moderation', label: t('nav.moderation'), icon: FileCheck2, badge: 'pendingListings' },
+    { id: 'users', label: t('nav.users'), icon: Users },
+    { id: 'kyc', label: t('nav.kyc'), icon: ShieldCheck, badge: 'pendingKyc' },
+    { id: 'reports', label: t('nav.reports'), icon: AlertTriangle, badge: 'pendingReports' },
+    { id: 'visits', label: t('nav.visits'), icon: CalendarDays },
+    { id: 'payments', label: t('nav.payments'), icon: CreditCard },
+    { id: 'system', label: t('nav.system'), icon: Settings },
+  ];
+}
 
-function formatDate(value) {
-  if (!value) return 'N/A';
-  try {
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(value));
-  } catch {
-    return 'N/A';
-  }
+function useFormatDate() {
+  const { dateLocale } = useI18n();
+  return function formatDate(value) {
+    if (!value) return 'N/A';
+    try {
+      return new Intl.DateTimeFormat(dateLocale, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(value));
+    } catch {
+      return 'N/A';
+    }
+  };
 }
 
 function formatMoney(value) {
@@ -94,7 +101,28 @@ function StatusBadge({ value }) {
   );
 }
 
+function LangSwitcher() {
+  const { lang, setLang } = useI18n();
+  return (
+    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+      <button
+        onClick={() => setLang('fr')}
+        className={`rounded-lg px-2.5 py-1 text-xs font-black transition ${lang === 'fr' ? 'bg-[#6C3FC4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+      >
+        FR
+      </button>
+      <button
+        onClick={() => setLang('en')}
+        className={`rounded-lg px-2.5 py-1 text-xs font-black transition ${lang === 'en' ? 'bg-[#6C3FC4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+      >
+        EN
+      </button>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }) {
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -120,7 +148,7 @@ function LoginScreen({ onLogin }) {
 
     if (profileError || !profile || !isAuthorizedAdmin(profile)) {
       await supabase.auth.signOut();
-      setError("Acces refuse. Ce compte n'est pas administrateur.");
+      setError(t('auth.error'));
       setLoading(false);
       return;
     }
@@ -137,23 +165,26 @@ function LoginScreen({ onLogin }) {
             <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
             <div className="absolute -bottom-16 -left-16 h-44 w-44 rounded-full bg-white/10" />
             <div className="relative">
-              <div className="mb-8 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/40 bg-white/20">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white text-base font-black text-[#6C3FC4]">
-                    R
+              <div className="mb-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/40 bg-white/20">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white text-base font-black text-[#6C3FC4]">
+                      R
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-base font-black tracking-tight">Rently</p>
+                    <p className="text-xs font-semibold text-white/70">Admin workspace</p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-base font-black tracking-tight">Rently</p>
-                  <p className="text-xs font-semibold text-white/70">Admin workspace</p>
-                </div>
+                <LangSwitcher />
               </div>
-              <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-white/70">Plateforme Manager</p>
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-white/70">{t('auth.tagline')}</p>
               <h1 className="max-w-xl text-4xl font-black tracking-tight sm:text-5xl">
-                Controle moderne pour gerer Rently.
+                {t('auth.heading')}
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/75">
-                Moderez les annonces, verifiez les landlords, suivez les paiements, traitez les signalements et gardez une vue claire sur la performance.
+                {t('auth.desc')}
               </p>
               <div className="mt-8 flex flex-wrap gap-2">
                 {['Secure', 'Fast review', 'Kigali ops'].map((item) => (
@@ -167,11 +198,11 @@ function LoginScreen({ onLogin }) {
 
           <section className="rounded-[28px] border border-violet-100 bg-white p-7 text-slate-900 shadow-2xl shadow-violet-100">
             <div className="mb-6">
-              <h2 className="text-2xl font-black">Connexion admin</h2>
-              <p className="mt-1 text-sm text-slate-500">Acces reserve aux comptes autorises.</p>
+              <h2 className="text-2xl font-black">{t('auth.title')}</h2>
+              <p className="mt-1 text-sm text-slate-500">{t('auth.subtitle')}</p>
             </div>
             <form onSubmit={handleLogin} className="space-y-4">
-              <Field label="Email">
+              <Field label={t('auth.email')}>
                 <input
                   type="email"
                   value={email}
@@ -181,19 +212,19 @@ function LoginScreen({ onLogin }) {
                   required
                 />
               </Field>
-              <Field label="Mot de passe">
+              <Field label={t('auth.password')}>
                 <input
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="input"
-                  placeholder="Votre mot de passe"
+                  placeholder={t('auth.passwordPlaceholder')}
                   required
                 />
               </Field>
               {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
               <button className="btn-primary w-full" disabled={loading}>
-                {loading ? 'Connexion...' : 'Se connecter'}
+                {loading ? t('auth.loading') : t('auth.submit')}
               </button>
             </form>
           </section>
@@ -204,12 +235,15 @@ function LoginScreen({ onLogin }) {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [adminProfile, setAdminProfile] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stats, setStats] = useState(defaultStats());
+
+  const TABS = useTabs();
 
   useEffect(() => {
     checkSession();
@@ -302,7 +336,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
-      {sidebarOpen && <button aria-label="Fermer le menu" className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <button aria-label={t('common.closeMenu')} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
@@ -352,7 +386,7 @@ export default function App() {
         <div className="border-t border-slate-100 p-3">
           <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-500 hover:bg-violet-50 hover:text-violet-700">
             <LogOut size={18} />
-            Deconnexion
+            {t('common.logout')}
           </button>
         </div>
       </aside>
@@ -365,13 +399,14 @@ export default function App() {
             </button>
             <div>
               <h1 className="text-lg font-black">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
-              <p className="hidden text-xs text-slate-500 sm:block">Gestion centrale de la plateforme Rently</p>
+              <p className="hidden text-xs text-slate-500 sm:block">{t('common.subtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <LangSwitcher />
             <button onClick={() => setRefreshKey((key) => key + 1)} className="btn-muted">
               <RefreshCw size={16} />
-              <span className="hidden sm:inline">Rafraichir</span>
+              <span className="hidden sm:inline">{t('common.refresh')}</span>
             </button>
             <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100">
               <Bell size={19} />
@@ -411,13 +446,14 @@ function defaultStats() {
 }
 
 function Dashboard({ stats }) {
+  const { t } = useI18n();
   const cards = [
-    { label: 'Utilisateurs', value: stats.totalUsers, helper: `${stats.tenants} tenants, ${stats.landlords} landlords`, icon: Users },
-    { label: 'Listings actifs', value: stats.activeListings, helper: `${stats.pendingListings} en attente`, icon: Home },
-    { label: 'KYC a traiter', value: stats.pendingKyc, helper: 'Landlords en verification', icon: ShieldCheck },
-    { label: 'Signalements', value: stats.pendingReports, helper: 'Tickets ouverts', icon: AlertTriangle },
-    { label: 'Visites', value: stats.totalVisits, helper: 'Demandes totales', icon: CalendarDays },
-    { label: 'Revenus', value: formatMoney(stats.revenue), helper: `${stats.pendingPayments} paiements en attente`, icon: BarChart3 },
+    { label: t('dashboard.users'), value: stats.totalUsers, helper: `${stats.tenants} tenants, ${stats.landlords} landlords`, icon: Users },
+    { label: t('dashboard.activeListings'), value: stats.activeListings, helper: `${stats.pendingListings} ${t('dashboard.pending')}`, icon: Home },
+    { label: t('dashboard.kycTodo'), value: stats.pendingKyc, helper: t('dashboard.landlordVerif'), icon: ShieldCheck },
+    { label: t('dashboard.reports'), value: stats.pendingReports, helper: t('dashboard.openTickets'), icon: AlertTriangle },
+    { label: t('dashboard.visits'), value: stats.totalVisits, helper: t('dashboard.totalRequests'), icon: CalendarDays },
+    { label: t('dashboard.revenue'), value: formatMoney(stats.revenue), helper: `${stats.pendingPayments} ${t('dashboard.pendingPayments')}`, icon: BarChart3 },
   ];
 
   return (
@@ -432,24 +468,24 @@ function Dashboard({ stats }) {
         <div className="panel">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="section-title">Priorites operations</h2>
-              <p className="section-subtitle">Ce qui demande une action admin rapide.</p>
+              <h2 className="section-title">{t('dashboard.prioritiesTitle')}</h2>
+              <p className="section-subtitle">{t('dashboard.prioritiesDesc')}</p>
             </div>
             <SlidersHorizontal size={18} className="text-slate-400" />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <PriorityCard label="Listings a moderer" value={stats.pendingListings} tone="violet" />
-            <PriorityCard label="KYC en attente" value={stats.pendingKyc} tone="amber" />
-            <PriorityCard label="Signalements ouverts" value={stats.pendingReports} tone="blue" />
+            <PriorityCard label={t('dashboard.toModerate')} value={stats.pendingListings} tone="violet" />
+            <PriorityCard label={t('dashboard.kycPending')} value={stats.pendingKyc} tone="amber" />
+            <PriorityCard label={t('dashboard.openReports')} value={stats.pendingReports} tone="blue" />
           </div>
         </div>
 
         <div className="panel">
-          <h2 className="section-title">Sante plateforme</h2>
+          <h2 className="section-title">{t('dashboard.healthTitle')}</h2>
           <div className="mt-5 space-y-4">
-            <HealthRow label="Listings actifs" value={stats.activeListings} total={Math.max(stats.totalListings, 1)} />
-            <HealthRow label="Utilisateurs landlords" value={stats.landlords} total={Math.max(stats.totalUsers, 1)} />
-            <HealthRow label="Demandes KYC" value={stats.pendingKyc} total={Math.max(stats.landlords, 1)} />
+            <HealthRow label={t('dashboard.activeListingsHealth')} value={stats.activeListings} total={Math.max(stats.totalListings, 1)} />
+            <HealthRow label={t('dashboard.landlordUsers')} value={stats.landlords} total={Math.max(stats.totalUsers, 1)} />
+            <HealthRow label={t('dashboard.kycRequests')} value={stats.pendingKyc} total={Math.max(stats.landlords, 1)} />
           </div>
         </div>
       </div>
@@ -504,6 +540,8 @@ function HealthRow({ label, value, total }) {
 }
 
 function Moderation({ admin, onChange }) {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState('pending_review');
   const [search, setSearch] = useState('');
@@ -578,10 +616,10 @@ function Moderation({ admin, onChange }) {
       <Toolbar
         search={search}
         setSearch={setSearch}
-        placeholder="Rechercher une annonce, landlord, district..."
+        placeholder={t('moderation.searchPlaceholder')}
         right={
           <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">Tous les statuts</option>
+            <option value="all">{t('common.allStatuses')}</option>
             {LISTING_STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}
           </select>
         }
@@ -590,8 +628,8 @@ function Moderation({ admin, onChange }) {
       <div className="panel overflow-hidden p-0">
         <Table
           loading={loading}
-          empty="Aucune annonce pour ce filtre."
-          columns={['Annonce', 'Landlord', 'Prix', 'Statut', 'Soumise', 'Actions']}
+          empty={t('moderation.empty')}
+          columns={[t('moderation.listing'), t('common.landlord'), t('common.price'), t('common.status'), t('moderation.submitted'), t('common.actions')]}
           rows={filtered.map((listing) => (
             <tr key={listing.id} className="table-row">
               <td className="table-cell">
@@ -608,7 +646,7 @@ function Moderation({ admin, onChange }) {
               <td className="table-cell">
                 <button className="btn-muted" onClick={() => setSelected(listing)}>
                   <Eye size={15} />
-                  Examiner
+                  {t('moderation.review')}
                 </button>
               </td>
             </tr>
@@ -630,27 +668,28 @@ function Moderation({ admin, onChange }) {
 }
 
 function ListingReviewModal({ listing, onClose, onApprove, onRevision, onReject }) {
+  const { t } = useI18n();
   const [note, setNote] = useState('');
   return (
-    <Modal title="Review listing" onClose={onClose}>
+    <Modal title={t('moderation.reviewTitle')} onClose={onClose}>
       <div className="space-y-5">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Annonce</p>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">{t('moderation.listing')}</p>
           <h3 className="mt-1 text-2xl font-black">{listing.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{listing.description || 'Aucune description.'}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{listing.description || t('moderation.noDesc')}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Info label="Prix" value={formatMoney(listing.monthly_rent)} />
-          <Info label="Type" value={listing.listing_category || listing.type || 'residential'} />
-          <Info label="District" value={listing.locations?.district || 'N/A'} />
+          <Info label={t('common.price')} value={formatMoney(listing.monthly_rent)} />
+          <Info label={t('common.type')} value={listing.listing_category || listing.type || 'residential'} />
+          <Info label={t('common.district')} value={listing.locations?.district || 'N/A'} />
         </div>
-        <Field label="Note admin">
-          <textarea className="input min-h-28 resize-y" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Decision, raison, demande de correction..." />
+        <Field label={t('moderation.adminNote')}>
+          <textarea className="input min-h-28 resize-y" value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('moderation.notePlaceholder')} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-3">
-          <button className="btn-success" onClick={() => onApprove(note)}>Approuver</button>
-          <button className="btn-muted justify-center" onClick={() => onRevision(note)}>Demander revision</button>
-          <button className="btn-danger" onClick={() => onReject(note)}>Rejeter</button>
+          <button className="btn-success" onClick={() => onApprove(note)}>{t('moderation.approve')}</button>
+          <button className="btn-muted justify-center" onClick={() => onRevision(note)}>{t('moderation.requestRevision')}</button>
+          <button className="btn-danger" onClick={() => onReject(note)}>{t('moderation.reject')}</button>
         </div>
       </div>
     </Modal>
@@ -658,6 +697,8 @@ function ListingReviewModal({ listing, onClose, onApprove, onRevision, onReject 
 }
 
 function UsersModule({ onChange }) {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('all');
@@ -695,10 +736,10 @@ function UsersModule({ onChange }) {
       <Toolbar
         search={search}
         setSearch={setSearch}
-        placeholder="Rechercher nom, email, telephone..."
+        placeholder={t('users.searchPlaceholder')}
         right={
           <select className="select" value={role} onChange={(event) => setRole(event.target.value)}>
-            <option value="all">Tous les roles</option>
+            <option value="all">{t('users.allRoles')}</option>
             <option value="tenant">Tenants</option>
             <option value="landlord">Landlords</option>
             <option value="admin">Admins</option>
@@ -708,12 +749,12 @@ function UsersModule({ onChange }) {
       <div className="panel overflow-hidden p-0">
         <Table
           loading={loading}
-          empty="Aucun utilisateur trouve."
-          columns={['Utilisateur', 'Role', 'Verification', 'Langue', 'Inscription', 'Actions']}
+          empty={t('users.empty')}
+          columns={[t('common.user'), t('users.role'), t('users.verification'), t('users.lang'), t('users.registered'), t('common.actions')]}
           rows={filtered.map((user) => (
             <tr key={user.id} className="table-row">
               <td className="table-cell">
-                <p className="font-black">{user.full_name || 'Sans nom'}</p>
+                <p className="font-black">{user.full_name || t('users.noName')}</p>
                 <p className="text-xs text-slate-400">{user.email}</p>
               </td>
               <td className="table-cell"><StatusBadge value={user.role} /></td>
@@ -723,11 +764,11 @@ function UsersModule({ onChange }) {
               <td className="table-cell">
                 <div className="flex flex-wrap gap-2">
                   <button className="btn-muted" onClick={() => updateUser(user, { is_verified: !user.is_verified })}>
-                    {user.is_verified ? 'Retirer verification' : 'Verifier'}
+                    {user.is_verified ? t('users.removeVerif') : t('users.verify')}
                   </button>
                   {user.role !== 'admin' && (
                     <button className="btn-muted" onClick={() => updateUser(user, { role: user.role === 'tenant' ? 'landlord' : 'tenant' })}>
-                      Basculer role
+                      {t('users.switchRole')}
                     </button>
                   )}
                 </div>
@@ -741,6 +782,8 @@ function UsersModule({ onChange }) {
 }
 
 function KycModule({ admin, onChange }) {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
@@ -798,12 +841,12 @@ function KycModule({ admin, onChange }) {
     <div className="space-y-5">
       <div className="flex justify-end">
         <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">Tous les statuts</option>
+          <option value="all">{t('common.allStatuses')}</option>
           {KYC_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        {loading ? <LoadingState /> : rows.length === 0 ? <EmptyState title="Aucune demande KYC" /> : rows.map((item) => (
+        {loading ? <LoadingState /> : rows.length === 0 ? <EmptyState title={t('kyc.empty')} /> : rows.map((item) => (
           <button key={item.id} className="panel text-left hover:border-violet-200" onClick={() => setSelected(item)}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -813,8 +856,8 @@ function KycModule({ admin, onChange }) {
               <StatusBadge value={item.status} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <Info label="Document" value={item.document_type} />
-              <Info label="Soumis" value={formatDate(item.created_at)} />
+              <Info label={t('kyc.document')} value={item.document_type} />
+              <Info label={t('kyc.submitted')} value={formatDate(item.created_at)} />
             </div>
           </button>
         ))}
@@ -825,6 +868,7 @@ function KycModule({ admin, onChange }) {
 }
 
 function KycModal({ item, onClose, onApprove, onReject }) {
+  const { t } = useI18n();
   const [note, setNote] = useState('');
   const [urls, setUrls] = useState({});
 
@@ -845,41 +889,43 @@ function KycModal({ item, onClose, onApprove, onReject }) {
   }, [item]);
 
   return (
-    <Modal title="Verification KYC" onClose={onClose}>
+    <Modal title={t('kyc.reviewTitle')} onClose={onClose}>
       <div className="space-y-5">
         <div>
           <h3 className="text-xl font-black">{item.profiles?.full_name}</h3>
           <p className="text-sm text-slate-500">{item.profiles?.email}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <KycImage label="Recto document" src={urls.doc_front_url} />
-          <KycImage label="Verso document" src={urls.doc_back_url} />
-          <KycImage label="Selfie" src={urls.selfie_url} />
+          <KycImage label={t('kyc.docFront')} src={urls.doc_front_url} unavailableText={t('kyc.unavailable')} />
+          <KycImage label={t('kyc.docBack')} src={urls.doc_back_url} unavailableText={t('kyc.unavailable')} />
+          <KycImage label={t('kyc.selfie')} src={urls.selfie_url} unavailableText={t('kyc.unavailable')} />
         </div>
-        <Field label="Note de decision">
+        <Field label={t('kyc.decisionNote')}>
           <textarea className="input min-h-24" value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <button className="btn-success" onClick={() => onApprove(note)}>Approuver KYC</button>
-          <button className="btn-danger" onClick={() => onReject(note)}>Rejeter KYC</button>
+          <button className="btn-success" onClick={() => onApprove(note)}>{t('kyc.approve')}</button>
+          <button className="btn-danger" onClick={() => onReject(note)}>{t('kyc.reject')}</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function KycImage({ label, src }) {
+function KycImage({ label, src, unavailableText }) {
   return (
     <div>
       <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-400">{label}</p>
       <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
-        {src ? <img src={src} alt={label} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">Indisponible</div>}
+        {src ? <img src={src} alt={label} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">{unavailableText}</div>}
       </div>
     </div>
   );
 }
 
 function ReportsModule({ onChange }) {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
@@ -915,30 +961,30 @@ function ReportsModule({ onChange }) {
     <div className="space-y-5">
       <div className="flex justify-end">
         <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">Tous les statuts</option>
+          <option value="all">{t('common.allStatuses')}</option>
           {REPORT_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </div>
       <div className="panel overflow-hidden p-0">
         <Table
           loading={loading}
-          empty="Aucun signalement."
-          columns={['Categorie', 'Cible', 'Reporter', 'Statut', 'Date', 'Actions']}
+          empty={t('reports.empty')}
+          columns={[t('reports.category'), t('reports.target'), t('reports.reporter'), t('common.status'), t('common.date'), t('common.actions')]}
           rows={rows.map((report) => (
             <tr key={report.id} className="table-row">
               <td className="table-cell font-bold">{report.category}</td>
               <td className="table-cell">
-                <p className="font-bold">{report.listing?.title || report.target?.full_name || 'Utilisateur'}</p>
-                <p className="text-xs text-slate-400">{report.description || 'Aucune description'}</p>
+                <p className="font-bold">{report.listing?.title || report.target?.full_name || t('reports.userFallback')}</p>
+                <p className="text-xs text-slate-400">{report.description || t('reports.noDesc')}</p>
               </td>
               <td className="table-cell text-sm">{report.reporter?.full_name || 'N/A'}</td>
               <td className="table-cell"><StatusBadge value={report.status} /></td>
               <td className="table-cell text-xs text-slate-500">{formatDate(report.created_at)}</td>
               <td className="table-cell">
                 <div className="flex flex-wrap gap-2">
-                  <button className="btn-muted" onClick={() => updateReport(report, 'reviewed')}>Marquer vu</button>
-                  <button className="btn-success" onClick={() => updateReport(report, 'resolved')}>Resoudre</button>
-                  <button className="btn-muted" onClick={() => updateReport(report, 'dismissed')}>Ignorer</button>
+                  <button className="btn-muted" onClick={() => updateReport(report, 'reviewed')}>{t('reports.markReviewed')}</button>
+                  <button className="btn-success" onClick={() => updateReport(report, 'resolved')}>{t('reports.resolve')}</button>
+                  <button className="btn-muted" onClick={() => updateReport(report, 'dismissed')}>{t('reports.dismiss')}</button>
                 </div>
               </td>
             </tr>
@@ -950,6 +996,8 @@ function ReportsModule({ onChange }) {
 }
 
 function VisitsModule() {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -975,17 +1023,17 @@ function VisitsModule() {
     <div className="space-y-5">
       <div className="flex justify-end">
         <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">Toutes les visites</option>
-          <option value="pending">En attente</option>
-          <option value="confirmed">Confirmees</option>
-          <option value="cancelled">Annulees</option>
+          <option value="all">{t('visits.all')}</option>
+          <option value="pending">{t('visits.pending')}</option>
+          <option value="confirmed">{t('visits.confirmed')}</option>
+          <option value="cancelled">{t('visits.cancelled')}</option>
         </select>
       </div>
       <div className="panel overflow-hidden p-0">
         <Table
           loading={loading}
-          empty="Aucune visite."
-          columns={['Listing', 'Tenant', 'Landlord', 'Creneau', 'Statut']}
+          empty={t('visits.empty')}
+          columns={['Listing', 'Tenant', t('common.landlord'), t('visits.slot'), t('common.status')]}
           rows={rows.map((visit) => (
             <tr key={visit.id} className="table-row">
               <td className="table-cell font-bold">{visit.listing?.title || 'N/A'}</td>
@@ -1002,6 +1050,8 @@ function VisitsModule() {
 }
 
 function PaymentsModule() {
+  const { t } = useI18n();
+  const formatDate = useFormatDate();
   const [sessions, setSessions] = useState([]);
   const [revenue, setRevenue] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1023,16 +1073,16 @@ function PaymentsModule() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="Revenus encaisses" value={formatMoney(revenue.reduce((sum, row) => sum + Number(row.amount_rwf || 0), 0))} helper={`${revenue.length} transactions`} icon={BarChart3} />
-        <KpiCard label="Sessions paiement" value={sessions.length} helper="Dernieres demandes" icon={CreditCard} />
-        <KpiCard label="Paiements pending" value={sessions.filter((row) => row.status === 'pending').length} helper="A surveiller" icon={Clock3} />
+        <KpiCard label={t('payments.collected')} value={formatMoney(revenue.reduce((sum, row) => sum + Number(row.amount_rwf || 0), 0))} helper={`${revenue.length} ${t('payments.transactions')}`} icon={BarChart3} />
+        <KpiCard label={t('payments.sessions')} value={sessions.length} helper={t('payments.lastRequests')} icon={CreditCard} />
+        <KpiCard label={t('payments.pending')} value={sessions.filter((row) => row.status === 'pending').length} helper={t('payments.toMonitor')} icon={Clock3} />
       </div>
 
       <div className="panel overflow-hidden p-0">
         <Table
           loading={loading}
-          empty="Aucun paiement."
-          columns={['Utilisateur', 'District', 'Montant', 'Methode', 'Statut', 'Date']}
+          empty={t('payments.empty')}
+          columns={[t('common.user'), t('common.district'), t('payments.amount'), t('payments.method'), t('common.status'), t('common.date')]}
           rows={sessions.map((row) => (
             <tr key={row.id} className="table-row">
               <td className="table-cell">{row.profiles?.full_name || 'N/A'}</td>
@@ -1050,23 +1100,24 @@ function PaymentsModule() {
 }
 
 function SystemModule({ stats }) {
+  const { t } = useI18n();
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="panel">
-        <h2 className="section-title">Checklist admin</h2>
+        <h2 className="section-title">{t('system.checklistTitle')}</h2>
         <div className="mt-5 space-y-3">
-          <ChecklistItem done={stats.pendingListings === 0} label="Aucune annonce en attente de moderation" />
-          <ChecklistItem done={stats.pendingKyc === 0} label="Aucune demande KYC en attente" />
-          <ChecklistItem done={stats.pendingReports === 0} label="Aucun signalement ouvert" />
-          <ChecklistItem done={stats.pendingPayments === 0} label="Aucun paiement pending" />
+          <ChecklistItem done={stats.pendingListings === 0} label={t('system.noListingsPending')} />
+          <ChecklistItem done={stats.pendingKyc === 0} label={t('system.noKycPending')} />
+          <ChecklistItem done={stats.pendingReports === 0} label={t('system.noReportsPending')} />
+          <ChecklistItem done={stats.pendingPayments === 0} label={t('system.noPaymentsPending')} />
         </div>
       </div>
       <div className="panel">
-        <h2 className="section-title">Configuration</h2>
+        <h2 className="section-title">{t('system.configTitle')}</h2>
         <div className="mt-5 space-y-4 text-sm">
-          <Info label="Supabase" value="Connecte via VITE_SUPABASE_URL" />
-          <Info label="Securite" value="Acces limite aux admins autorises" />
-          <Info label="Modules" value="Listings, Users, KYC, Reports, Visits, Payments" />
+          <Info label={t('system.supabase')} value={t('system.supabaseValue')} />
+          <Info label={t('system.security')} value={t('system.securityValue')} />
+          <Info label={t('system.modules')} value={t('system.modulesValue')} />
         </div>
       </div>
     </div>
@@ -1147,11 +1198,12 @@ function Field({ label, children }) {
   );
 }
 
-function EmptyState({ title = 'Aucune donnee' }) {
+function EmptyState({ title }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white p-8 text-center">
       <Lock className="mb-3 text-slate-300" size={32} />
-      <p className="font-black text-slate-700">{title}</p>
+      <p className="font-black text-slate-700">{title || t('common.noData')}</p>
     </div>
   );
 }
