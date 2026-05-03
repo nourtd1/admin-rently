@@ -170,36 +170,36 @@ function LoginScreen({ onLogin }) {
 
   return (
     <main className="min-h-screen bg-[#F5F0FF] text-white">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-6">
-        <div className="grid w-full items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
-          <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#4A2D9C] via-[#6C3FC4] to-[#8B5CF6] p-8 shadow-2xl shadow-violet-200 lg:p-10">
+      <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center p-4 sm:p-6">
+        <div className="grid w-full items-stretch gap-0 overflow-hidden rounded-[32px] bg-white shadow-2xl lg:grid-cols-[1.1fr_0.9fr]">
+          
+          {/* Left section: Branding & Info (Hidden on small mobile if needed, but here we stack) */}
+          <section className="relative flex flex-col justify-center bg-gradient-to-br from-[#4A2D9C] via-[#6C3FC4] to-[#8B5CF6] p-8 sm:p-12">
             <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
             <div className="absolute -bottom-16 -left-16 h-44 w-44 rounded-full bg-white/10" />
             <div className="relative">
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-8 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/40 bg-white/20">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white text-base font-black text-[#6C3FC4]">
-                      R
-                    </div>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/30 bg-white/20 backdrop-blur-md">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-base font-black text-[#6C3FC4]">R</div>
                   </div>
                   <div>
-                    <p className="text-base font-black tracking-tight">Rently</p>
-                    <p className="text-xs font-semibold text-white/70">Admin workspace</p>
+                    <p className="text-sm font-black tracking-tight">Rently</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Admin Portal</p>
                   </div>
                 </div>
                 <LangSwitcher />
               </div>
-              <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-white/70">{t('auth.tagline')}</p>
-              <h1 className="max-w-xl text-4xl font-black tracking-tight sm:text-5xl">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-[0.3em] text-white/70">{t('auth.tagline')}</p>
+              <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
                 {t('auth.heading')}
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/75">
+              <p className="mt-6 hidden max-w-md text-sm leading-relaxed text-white/70 sm:block">
                 {t('auth.desc')}
               </p>
               <div className="mt-8 flex flex-wrap gap-2">
-                {['Secure', 'Fast review', 'Kigali ops'].map((item) => (
-                  <span key={item} className="rounded-full border border-white/30 bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
+                {['Secure', 'Real-time', 'Kigali Hub'].map((item) => (
+                  <span key={item} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">
                     {item}
                   </span>
                 ))}
@@ -207,15 +207,17 @@ function LoginScreen({ onLogin }) {
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-violet-100 bg-white p-7 text-slate-900 shadow-2xl shadow-violet-100">
-            <div className="mb-6">
-              <h2 className="text-2xl font-black">{t('auth.title')}</h2>
-              <p className="mt-1 text-sm text-slate-500">{t('auth.subtitle')}</p>
+          {/* Right section: Login Form */}
+          <section className="flex flex-col justify-center bg-white p-8 sm:p-12 text-slate-900">
+            <div className="mb-8">
+              <h2 className="text-2xl font-black tracking-tight">{t('auth.title')}</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">{t('auth.subtitle')}</p>
             </div>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-5">
               <Field label={t('auth.email')}>
                 <input
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="input"
@@ -226,19 +228,34 @@ function LoginScreen({ onLogin }) {
               <Field label={t('auth.password')}>
                 <input
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="input"
-                  placeholder={t('auth.passwordPlaceholder')}
+                  placeholder="••••••••"
                   required
                 />
               </Field>
-              {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
-              <button className="btn-primary w-full" disabled={loading}>
-                {loading ? t('auth.loading') : t('auth.submit')}
+              {error && (
+                <div className="flex items-center gap-3 rounded-2xl bg-red-50 p-4 text-xs font-bold text-red-600 ring-1 ring-red-100">
+                  <AlertTriangle size={16} className="shrink-0" />
+                  {error}
+                </div>
+              )}
+              <button className="btn-primary w-full py-4 text-base" disabled={loading}>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    {t('auth.loading')}
+                  </div>
+                ) : t('auth.submit')}
               </button>
             </form>
+            <p className="mt-8 text-center text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              © {new Date().getFullYear()} Rently Kigali • Rwanda
+            </p>
           </section>
+
         </div>
       </div>
     </main>
